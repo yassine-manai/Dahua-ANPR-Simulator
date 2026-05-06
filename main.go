@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/simulator/config"
@@ -11,7 +10,6 @@ import (
 )
 
 func main() {
-	// Load persisted config
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
@@ -22,38 +20,40 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
-	// Serve static UI files
+	// Static UI
 	r.Static("/ui", "./ui")
 	r.GET("/", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/ui/index.html")
+		c.Redirect(301, "/ui/index.html")
 	})
 
-	// ── Camera CRUD ──
+	// ── Cameras ──────────────────────────────────────────────────────────────
 	sim := r.Group("/sim")
-	{
-		sim.GET("/cameras", h.ListCameras)
-		sim.POST("/cameras", h.AddCamera)
-		sim.PUT("/cameras/:id", h.UpdateCamera)
-		sim.DELETE("/cameras/:id", h.DeleteCamera)
 
-		// Log
-		sim.GET("/cameras/:id/log", h.GetLog)
-		sim.DELETE("/cameras/:id/log", h.ClearLog)
+	sim.GET("/cameras", h.ListCameras)
+	sim.POST("/cameras", h.AddCamera)
+	sim.PUT("/cameras/:id", h.UpdateCamera)
+	sim.DELETE("/cameras/:id", h.DeleteCamera)
 
-		// Heartbeat control
-		sim.POST("/cameras/:id/heartbeat/start", h.StartHeartbeat)
-		sim.POST("/cameras/:id/heartbeat/stop", h.StopHeartbeat)
+	sim.GET("/cameras/:id/log", h.GetLog)
+	sim.DELETE("/cameras/:id/log", h.ClearLog)
 
-		// Send actions
-		sim.POST("/cameras/:id/send/deviceinfo", h.SendDeviceInfo)
-		sim.POST("/cameras/:id/send/keepalive", h.SendKeepAlive)
-		sim.POST("/cameras/:id/send/anpr", h.SendANPR)
-		sim.POST("/cameras/:id/send/parking", h.SendParking)
-		sim.POST("/cameras/:id/send/alarm", h.SendAlarm)
-	}
+	sim.POST("/cameras/:id/heartbeat/start", h.StartHeartbeat)
+	sim.POST("/cameras/:id/heartbeat/stop", h.StopHeartbeat)
+
+	sim.POST("/cameras/:id/send/deviceinfo", h.SendDeviceInfo)
+	sim.POST("/cameras/:id/send/keepalive", h.SendKeepAlive)
+	sim.POST("/cameras/:id/send/anpr", h.SendANPR)
+	sim.POST("/cameras/:id/send/parking", h.SendParking)
+	sim.POST("/cameras/:id/send/alarm", h.SendAlarm)
+
+	// ── Image library ─────────────────────────────────────────────────────────
+	sim.GET("/images", h.ListImages)
+	sim.POST("/images", h.AddImages)
+	sim.GET("/images/:id", h.GetImage)
+	sim.DELETE("/images/:id", h.DeleteImage)
 
 	addr := ":9797"
-	fmt.Printf("\n🎥  Dahua ITS Simulator running at http://localhost%s\n\n", addr)
+	fmt.Printf("\n🎥  Dahua ITS Simulator  →  http://localhost%s\n\n", addr)
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}

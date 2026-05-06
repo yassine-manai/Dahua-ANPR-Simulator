@@ -1,12 +1,26 @@
+networks:
+  web:
+    external: true
+
 services:
   simulator:
-    build: .
-    container_name: dahua-its-simulator
+    #image: yassinemanai/dahua-anpr-simulator:v1.0.0  #THIS with just one request - no channels 
+    
+    image: yassinemanai/dahua-anpr-simulator:v1.0.0
+    container_name: dahua-anpr_simulator
     ports:
-      - "9090:9090"
+      - "9797:9797"
     volumes:
       # Persist sim_config.json across container restarts
-      - ./data:/app/data
+      - ./data/dahua:/app/data
     environment:
       - CONFIG_PATH=/app/data/sim_config.json
     restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dh.rule=Host(`dahua_sim.dev.asteroidea.co`) && PathPrefix(`/sim`)"
+      - "traefik.http.routers.dh.entrypoints=web,websecure"
+      - "traefik.http.services.dh.loadbalancer.server.port=9797"
+    networks:
+      - web
+

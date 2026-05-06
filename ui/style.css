@@ -577,3 +577,372 @@ button {
   color: var(--accent);
   background: var(--bg4);
 }
+
+/* ── Multi-Spot tab ───────────────────────────────────────────────────────── */
+.ms-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.ms-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Channel block */
+.ms-channel {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg2);
+  overflow: hidden;
+}
+
+.ms-channel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+}
+
+.ms-channel-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ms-channel-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text);
+  padding: 2px 6px;
+  flex: 1;
+  min-width: 0;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ms-channel-label:hover {
+  border-color: var(--border);
+  background: var(--bg2);
+}
+.ms-channel-label:focus {
+  border-color: var(--accent);
+  background: var(--bg2);
+  box-shadow: 0 0 0 2px rgba(0,112,204,0.1);
+}
+[data-theme="dark"] .ms-channel-label:focus {
+  box-shadow: 0 0 0 2px rgba(0,229,255,0.1);
+}
+
+.ms-channel-remove {
+  background: transparent;
+  border: none;
+  color: var(--text3);
+  font-size: 14px;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 3px;
+  letter-spacing: 0;
+  transition: color 0.12s;
+  margin-left: auto;
+}
+.ms-channel-remove:hover { color: var(--red); }
+
+/* Spots row */
+.ms-spots-row {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+/* Spot card */
+.ms-spot-card {
+  flex-shrink: 0;
+  width: 130px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.ms-spot-card:hover {
+  border-color: var(--border2);
+}
+.ms-spot-card.sending {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0,112,204,0.15);
+}
+[data-theme="dark"] .ms-spot-card.sending {
+  box-shadow: 0 0 0 2px rgba(0,229,255,0.15);
+}
+.ms-spot-card.sent-ok {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(26,158,92,0.15);
+}
+[data-theme="dark"] .ms-spot-card.sent-ok {
+  box-shadow: 0 0 0 2px rgba(0,230,118,0.15);
+}
+.ms-spot-card.sent-err {
+  border-color: var(--red);
+  box-shadow: 0 0 0 2px rgba(214,50,72,0.15);
+}
+
+.ms-spot-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text3);
+  font-size: 12px;
+  line-height: 1;
+  padding: 1px 3px;
+  cursor: pointer;
+  border-radius: 2px;
+  letter-spacing: 0;
+  transition: color 0.12s;
+}
+.ms-spot-remove:hover { color: var(--red); }
+
+.ms-spot-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ms-spot-field label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--text3);
+  text-transform: uppercase;
+}
+.ms-spot-input {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  padding: 4px 6px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.ms-spot-input:focus {
+  border-color: var(--accent);
+}
+
+.ms-spot-send {
+  margin-top: 2px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 5px 0;
+  width: 100%;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.1s;
+}
+.ms-spot-send:hover { background: var(--accent2); }
+.ms-spot-send:active { transform: scale(0.97); }
+[data-theme="dark"] .ms-spot-send { color: #000; }
+
+.ms-spot-status {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-align: center;
+  min-height: 12px;
+  color: var(--text3);
+  transition: color 0.2s;
+}
+.ms-spot-status.ok  { color: var(--green); }
+.ms-spot-status.err { color: var(--red); }
+
+/* Add-spot card (the + tile) */
+.ms-add-spot {
+  flex-shrink: 0;
+  width: 130px;
+  border: 1px dashed var(--border2);
+  border-radius: 4px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 148px;
+  font-size: 22px;
+  color: var(--text3);
+  transition: border-color 0.15s, color 0.15s;
+  font-family: var(--font-ui);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.ms-add-spot:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* hide add tile when channel is full (JS adds .ms-full to the channel) */
+.ms-channel.ms-full .ms-add-spot { display: none; }
+
+/* ── Image library (config panel) ────────────────────────────────────────── */
+.img-library {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-load-img {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text2);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  align-self: flex-start;
+}
+.btn-load-img:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.img-count {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text3);
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+
+.img-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.img-thumb-card {
+  position: relative;
+  width: 60px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--bg3);
+  flex-shrink: 0;
+}
+.img-thumb-card img {
+  width: 60px;
+  height: 44px;
+  object-fit: cover;
+  display: block;
+}
+.img-thumb-name {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--text3);
+  padding: 2px 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.img-thumb-remove {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  border: none;
+  border-radius: 2px;
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 3px;
+  cursor: pointer;
+  letter-spacing: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.img-thumb-card:hover .img-thumb-remove { opacity: 1; }
+
+/* ── Image picker dropdowns (send tabs) ───────────────────────────────────── */
+.img-picker-group {
+  margin-bottom: 10px;
+}
+.img-picker-row {
+  display: flex;
+  gap: 8px;
+}
+.img-picker-select {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  padding: 5px 24px 5px 6px;
+  width: 100%;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a93aa'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  transition: border-color 0.15s;
+}
+.img-picker-select:focus { border-color: var(--accent); }
+
+/* ── Spot card image preview ─────────────────────────────────────────────── */
+.ms-spot-preview {
+  display: none;
+  width: 100%;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  margin: 2px 0;
+}
+.ms-spot-preview-img {
+  width: 100%;
+  height: 72px;
+  object-fit: cover;
+  display: block;
+}
+
+/* Image picker inside spot card — reuse ms-spot-input style */
+.ms-spot-img-sel {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a93aa'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 20px;
+  cursor: pointer;
+}

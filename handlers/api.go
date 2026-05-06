@@ -14,8 +14,6 @@ import (
 	"github.com/simulator/models"
 )
 
-// ── Log ───────────────────────────────────────────────────────────────────────
-
 const maxLogEntries = 200
 
 type LogEntry struct {
@@ -28,34 +26,30 @@ type LogEntry struct {
 	Error      string `json:"error,omitempty"`
 }
 
-// ── Runtime state ─────────────────────────────────────────────────────────────
-
 type runtimeCamera struct {
 	stopHeartbeat chan struct{}
 	log           []LogEntry
 	logMu         sync.Mutex
 }
 
-// Handler holds all runtime state and the persisted config.
 type Handler struct {
 	cfg     *config.SimConfig
 	mu      sync.Mutex
-	runtime map[string]*runtimeCamera // keyed by camera ID
+	runtime map[string]*runtimeCamera
 }
 
 func New(cfg *config.SimConfig) *Handler {
-	h := &Handler{
-		cfg:     cfg,
-		runtime: make(map[string]*runtimeCamera),
-	}
-	// Init runtime entries for cameras loaded from disk.
+	h := &Handler{cfg: cfg, runtime: make(map[string]*runtimeCamera)}
 	for _, cam := range cfg.All() {
 		h.runtime[cam.ID] = &runtimeCamera{}
 	}
 	return h
 }
 
-func (h *Handler) runtime_(id string) *runtimeCamera {
+// SetID is kept for backward compatibility but unused with gin (params come from context).
+func (h *Handler) SetID(_ string) {}
+
+func (h *Handler) rt(id string) *runtimeCamera {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if _, ok := h.runtime[id]; !ok {
@@ -64,11 +58,11 @@ func (h *Handler) runtime_(id string) *runtimeCamera {
 	return h.runtime[id]
 }
 
-func (h *Handler) appendLog(id string, entry LogEntry) {
-	rt := h.runtime_(id)
+func (h *Handler) appendLog(id string, e LogEntry) {
+	rt := h.rt(id)
 	rt.logMu.Lock()
 	defer rt.logMu.Unlock()
-	rt.log = append(rt.log, entry)
+	rt.log = append(rt.log, e)
 	if len(rt.log) > maxLogEntries {
 		rt.log = rt.log[len(rt.log)-maxLogEntries:]
 	}
@@ -76,12 +70,10 @@ func (h *Handler) appendLog(id string, entry LogEntry) {
 
 // ── Camera CRUD ───────────────────────────────────────────────────────────────
 
-// GET /sim/cameras
 func (h *Handler) ListCameras(c *gin.Context) {
 	c.JSON(http.StatusOK, h.cfg.All())
 }
 
-// POST /sim/cameras
 func (h *Handler) AddCamera(c *gin.Context) {
 	var cam config.CameraConfig
 	if err := c.ShouldBindJSON(&cam); err != nil {
@@ -99,7 +91,6 @@ func (h *Handler) AddCamera(c *gin.Context) {
 	c.JSON(http.StatusOK, cam)
 }
 
-// PUT /sim/cameras/:id
 func (h *Handler) UpdateCamera(c *gin.Context) {
 	id := c.Param("id")
 	if _, ok := h.cfg.Get(id); !ok {
@@ -120,10 +111,9 @@ func (h *Handler) UpdateCamera(c *gin.Context) {
 	c.JSON(http.StatusOK, cam)
 }
 
-// DELETE /sim/cameras/:id
 func (h *Handler) DeleteCamera(c *gin.Context) {
 	id := c.Param("id")
-	h.stopHeartbeatIfRunning(id)
+	h.stopHB(id)
 	h.cfg.Delete(id)
 	if err := h.cfg.Save(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -134,13 +124,11 @@ func (h *Handler) DeleteCamera(c *gin.Context) {
 
 // ── Log ───────────────────────────────────────────────────────────────────────
 
-// GET /sim/cameras/:id/log
 func (h *Handler) GetLog(c *gin.Context) {
 	id := c.Param("id")
-	rt := h.runtime_(id)
+	rt := h.rt(id)
 	rt.logMu.Lock()
 	defer rt.logMu.Unlock()
-	// Return a copy in reverse order (newest first)
 	out := make([]LogEntry, len(rt.log))
 	for i, e := range rt.log {
 		out[len(rt.log)-1-i] = e
@@ -148,19 +136,17 @@ func (h *Handler) GetLog(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-// DELETE /sim/cameras/:id/log
 func (h *Handler) ClearLog(c *gin.Context) {
 	id := c.Param("id")
-	rt := h.runtime_(id)
+	rt := h.rt(id)
 	rt.logMu.Lock()
 	rt.log = nil
 	rt.logMu.Unlock()
 	c.JSON(http.StatusOK, gin.H{"cleared": true})
 }
 
-// ── Heartbeat control ─────────────────────────────────────────────────────────
+// ── Heartbeat ─────────────────────────────────────────────────────────────────
 
-// POST /sim/cameras/:id/heartbeat/start
 func (h *Handler) StartHeartbeat(c *gin.Context) {
 	id := c.Param("id")
 	cam, ok := h.cfg.Get(id)
@@ -172,7 +158,7 @@ func (h *Handler) StartHeartbeat(c *gin.Context) {
 	if interval <= 0 {
 		interval = 30
 	}
-	h.stopHeartbeatIfRunning(id)
+	h.stopHB(id)
 	stop := make(chan struct{})
 	h.mu.Lock()
 	if h.runtime[id] == nil {
@@ -184,12 +170,11 @@ func (h *Handler) StartHeartbeat(c *gin.Context) {
 	go func() {
 		ticker := time.NewTicker(time.Duration(interval) * time.Second)
 		defer ticker.Stop()
-		// Send immediately on start
-		h.doSendHeartbeat(cam)
+		h.doHeartbeat(cam)
 		for {
 			select {
 			case <-ticker.C:
-				h.doSendHeartbeat(cam)
+				h.doHeartbeat(cam)
 			case <-stop:
 				return
 			}
@@ -198,14 +183,12 @@ func (h *Handler) StartHeartbeat(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"started": true, "interval": interval})
 }
 
-// POST /sim/cameras/:id/heartbeat/stop
 func (h *Handler) StopHeartbeat(c *gin.Context) {
-	id := c.Param("id")
-	h.stopHeartbeatIfRunning(id)
+	h.stopHB(c.Param("id"))
 	c.JSON(http.StatusOK, gin.H{"stopped": true})
 }
 
-func (h *Handler) stopHeartbeatIfRunning(id string) {
+func (h *Handler) stopHB(id string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if rt, ok := h.runtime[id]; ok && rt.stopHeartbeat != nil {
@@ -214,9 +197,8 @@ func (h *Handler) stopHeartbeatIfRunning(id string) {
 	}
 }
 
-// ── Send endpoints ────────────────────────────────────────────────────────────
+// ── Send handlers ─────────────────────────────────────────────────────────────
 
-// POST /sim/cameras/:id/send/deviceinfo
 func (h *Handler) SendDeviceInfo(c *gin.Context) {
 	cam, ok := h.resolveCamera(c)
 	if !ok {
@@ -230,22 +212,20 @@ func (h *Handler) SendDeviceInfo(c *gin.Context) {
 		IPAddress:    cam.IPAddress,
 		DeviceID:     cam.DeviceID,
 	}
-	merged := h.mergeOverrides(c, payload)
+	merged := h.merge(c, payload)
 	status, res, err := h.post(cam, "/NotificationInfo/DeviceInfo", merged)
 	h.logAndRespond(c, cam.ID, "/NotificationInfo/DeviceInfo", merged, status, res, err)
 }
 
-// POST /sim/cameras/:id/send/keepalive
 func (h *Handler) SendKeepAlive(c *gin.Context) {
 	cam, ok := h.resolveCamera(c)
 	if !ok {
 		return
 	}
-	h.doSendHeartbeat(cam)
+	h.doHeartbeat(cam)
 	c.JSON(http.StatusOK, gin.H{"sent": true})
 }
 
-// POST /sim/cameras/:id/send/anpr
 func (h *Handler) SendANPR(c *gin.Context) {
 	cam, ok := h.resolveCamera(c)
 	if !ok {
@@ -256,7 +236,6 @@ func (h *Handler) SendANPR(c *gin.Context) {
 		Picture: models.ANPRPicture{
 			Plate: models.ANPRPlate{
 				IsExist:     true,
-				PlateNumber: "",
 				PlateColor:  "White",
 				PlateType:   "Normal",
 				Confidence:  90,
@@ -268,7 +247,7 @@ func (h *Handler) SendANPR(c *gin.Context) {
 			TriggerSource: "Video",
 			SnapTime:      now.Format("2006-01-02 15:04:05"),
 			AccurateTime:  now.Format("2006-01-02 15:04:05.000"),
-			TimeZone:      2, // GMT+02:00 Tunisia
+			TimeZone:      2,
 			DSTTune:       0,
 			LanNo:         1,
 			Direction:     "Obverse",
@@ -279,12 +258,11 @@ func (h *Handler) SendANPR(c *gin.Context) {
 			DeviceID:      cam.DeviceID,
 		},
 	}
-	merged := h.mergeOverrides(c, payload)
+	merged := h.merge(c, payload)
 	status, res, err := h.post(cam, "/NotificationInfo/TollgateInfo", merged)
 	h.logAndRespond(c, cam.ID, "/NotificationInfo/TollgateInfo", merged, status, res, err)
 }
 
-// POST /sim/cameras/:id/send/parking
 func (h *Handler) SendParking(c *gin.Context) {
 	cam, ok := h.resolveCamera(c)
 	if !ok {
@@ -295,7 +273,6 @@ func (h *Handler) SendParking(c *gin.Context) {
 		Picture: models.ParkingPicture{
 			Plate: models.ParkingPlate{
 				IsExist:     true,
-				PlateNumber: "",
 				PlateColor:  "White",
 				PlateType:   "Normal",
 				Confidence:  85,
@@ -310,17 +287,14 @@ func (h *Handler) SendParking(c *gin.Context) {
 			ParkingStallsNo: "A01",
 			Direction:       "Obverse",
 			ParkingStatus:   0,
-			AllowUser:       false,
-			BlockUser:       false,
 		},
 		DeviceID: cam.DeviceID,
 	}
-	merged := h.mergeOverrides(c, payload)
+	merged := h.merge(c, payload)
 	status, res, err := h.post(cam, "/NotificationInfo/ParkingInfo", merged)
 	h.logAndRespond(c, cam.ID, "/NotificationInfo/ParkingInfo", merged, status, res, err)
 }
 
-// POST /sim/cameras/:id/send/alarm
 func (h *Handler) SendAlarm(c *gin.Context) {
 	cam, ok := h.resolveCamera(c)
 	if !ok {
@@ -337,16 +311,74 @@ func (h *Handler) SendAlarm(c *gin.Context) {
 		},
 		DeviceID: cam.DeviceID,
 	}
-	merged := h.mergeOverrides(c, payload)
+	merged := h.merge(c, payload)
 	status, res, err := h.post(cam, "/NotificationInfo/AlarmInfo", merged)
 	h.logAndRespond(c, cam.ID, "/NotificationInfo/AlarmInfo", merged, status, res, err)
 }
 
-// ── Internal helpers ──────────────────────────────────────────────────────────
+// ── Image library ─────────────────────────────────────────────────────────────
+
+func (h *Handler) ListImages(c *gin.Context) {
+	c.JSON(http.StatusOK, h.cfg.AllImagesMeta())
+}
+
+func (h *Handler) GetImage(c *gin.Context) {
+	img, ok := h.cfg.GetImage(c.Param("id"))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
+		return
+	}
+	c.JSON(http.StatusOK, img)
+}
+
+func (h *Handler) AddImages(c *gin.Context) {
+	var incoming []struct {
+		Name string `json:"name"`
+		Data string `json:"data"`
+	}
+	if err := c.ShouldBindJSON(&incoming); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	added := []config.ImageEntry{}
+	skipped := 0
+	for _, item := range incoming {
+		entry := config.ImageEntry{
+			ID:   fmt.Sprintf("img_%d", time.Now().UnixNano()),
+			Name: item.Name,
+			Data: item.Data,
+		}
+		if !h.cfg.AddImage(entry) {
+			skipped++
+			continue
+		}
+		added = append(added, entry)
+		time.Sleep(time.Millisecond)
+	}
+	if err := h.cfg.Save(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"added":   len(added),
+		"skipped": skipped,
+		"images":  added,
+	})
+}
+
+func (h *Handler) DeleteImage(c *gin.Context) {
+	h.cfg.DeleteImage(c.Param("id"))
+	if err := h.cfg.Save(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": c.Param("id")})
+}
+
+// ── internals ─────────────────────────────────────────────────────────────────
 
 func (h *Handler) resolveCamera(c *gin.Context) (config.CameraConfig, bool) {
-	id := c.Param("id")
-	cam, ok := h.cfg.Get(id)
+	cam, ok := h.cfg.Get(c.Param("id"))
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "camera not found"})
 		return config.CameraConfig{}, false
@@ -354,38 +386,42 @@ func (h *Handler) resolveCamera(c *gin.Context) (config.CameraConfig, bool) {
 	return cam, true
 }
 
-// mergeOverrides unmarshals the request body overrides map and deep-merges
-// them into the default payload by round-tripping through JSON.
-func (h *Handler) mergeOverrides(c *gin.Context, defaultPayload interface{}) map[string]interface{} {
-	// Marshal default
-	base, _ := json.Marshal(defaultPayload)
+func (h *Handler) merge(c *gin.Context, def interface{}) map[string]interface{} {
+	base, _ := json.Marshal(def)
 	var m map[string]interface{}
 	json.Unmarshal(base, &m)
 
-	// Read body
 	body, _ := io.ReadAll(c.Request.Body)
+	defer c.Request.Body.Close()
 	if len(body) > 0 {
 		var req models.SendRequest
 		if err := json.Unmarshal(body, &req); err == nil && req.Overrides != nil {
-			for k, v := range req.Overrides {
-				m[k] = v
-			}
+			deepMerge(m, req.Overrides)
 		}
 	}
 	return m
 }
 
-// post sends a JSON POST to the camera's backend URL + path.
+func deepMerge(dst, src map[string]interface{}) {
+	for k, v := range src {
+		if srcMap, ok := v.(map[string]interface{}); ok {
+			if dstMap, ok := dst[k].(map[string]interface{}); ok {
+				deepMerge(dstMap, srcMap)
+				continue
+			}
+		}
+		dst[k] = v
+	}
+}
+
 func (h *Handler) post(cam config.CameraConfig, path string, payload interface{}) (int, string, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return 0, "", fmt.Errorf("handlers.post marshal: %w", err)
+		return 0, "", fmt.Errorf("handlers.post: %w", err)
 	}
-
-	url := cam.BackendURL + path
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPost, cam.BackendURL+path, bytes.NewReader(data))
 	if err != nil {
-		return 0, "", fmt.Errorf("handlers.post new request: %w", err)
+		return 0, "", fmt.Errorf("handlers.post: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
 	req.Header.Set("Connection", "close")
@@ -393,44 +429,38 @@ func (h *Handler) post(cam config.CameraConfig, path string, payload interface{}
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, "", fmt.Errorf("handlers.post do: %w", err)
+		return 0, "", fmt.Errorf("handlers.post: %w", err)
 	}
 	defer resp.Body.Close()
 	resBody, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, string(resBody), nil
 }
 
-func (h *Handler) doSendHeartbeat(cam config.CameraConfig) {
-	payload := models.HeartbeatPayload{
-		Active:   "keepAlive",
-		DeviceID: cam.DeviceID,
-	}
+func (h *Handler) doHeartbeat(cam config.CameraConfig) {
+	payload := models.HeartbeatPayload{Active: "keepAlive", DeviceID: cam.DeviceID}
 	status, res, err := h.post(cam, "/NotificationInfo/KeepAlive", payload)
-	entry := LogEntry{
+	b, _ := json.Marshal(payload)
+	e := LogEntry{
 		Time:       time.Now().Format("15:04:05"),
 		Endpoint:   "/NotificationInfo/KeepAlive",
 		Method:     "POST",
 		StatusCode: status,
+		ReqBody:    string(b),
 		ResBody:    res,
 	}
 	if err != nil {
-		entry.Error = err.Error()
+		e.Error = err.Error()
 	}
-	b, _ := json.Marshal(payload)
-	entry.ReqBody = string(b)
-	h.appendLog(cam.ID, entry)
+	h.appendLog(cam.ID, e)
 }
 
 func (h *Handler) logAndRespond(
 	c *gin.Context,
-	cameraID string,
-	endpoint string,
+	cameraID, endpoint string,
 	payload interface{},
-	statusCode int,
-	resBody string,
-	err error,
+	statusCode int, resBody string, err error,
 ) {
-	entry := LogEntry{
+	e := LogEntry{
 		Time:       time.Now().Format("15:04:05"),
 		Endpoint:   endpoint,
 		Method:     "POST",
@@ -438,11 +468,11 @@ func (h *Handler) logAndRespond(
 		ResBody:    resBody,
 	}
 	if err != nil {
-		entry.Error = err.Error()
+		e.Error = err.Error()
 	}
 	b, _ := json.Marshal(payload)
-	entry.ReqBody = string(b)
-	h.appendLog(cameraID, entry)
+	e.ReqBody = string(b)
+	h.appendLog(cameraID, e)
 
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{

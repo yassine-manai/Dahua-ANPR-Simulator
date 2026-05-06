@@ -105,6 +105,15 @@
           <textarea id="cfgPlatePool" rows="4" placeholder="TN1234AA&#10;TN5678BB&#10;TN9999ZZ"></textarea>
         </div>
 
+        <div class="section-divider">IMAGES <span id="imgCount" class="img-count"></span></div>
+        <div class="img-library">
+          <label class="btn-load-img">
+            📁 Load Images
+            <input type="file" id="imgFileInput" accept="image/*" multiple hidden />
+          </label>
+          <div id="imgThumbs" class="img-thumbs"></div>
+        </div>
+
         <div class="config-actions">
           <button class="btn-primary" id="btnSaveConfig">💾 SAVE CONFIG</button>
           <button class="btn-danger" id="btnDeleteCamera">🗑 DELETE</button>
@@ -126,6 +135,7 @@
         <button class="tab" data-tab="anpr">ANPR</button>
         <button class="tab" data-tab="parking">Parking</button>
         <button class="tab" data-tab="alarm">Alarm</button>
+        <button class="tab" data-tab="multispot">Multi-Spot</button>
       </div>
 
       <!-- Tab content -->
@@ -218,6 +228,22 @@
               </div>
             </div>
           </div>
+          <div class="img-picker-group">
+            <div class="img-picker-row">
+              <div class="field-group">
+                <label>Normal Pic (scene)</label>
+                <select id="anprImgNormal" class="img-picker-select"><option value="">— none —</option></select>
+              </div>
+              <div class="field-group">
+                <label>Vehicle Pic</label>
+                <select id="anprImgVehicle" class="img-picker-select"><option value="">— none —</option></select>
+              </div>
+              <div class="field-group">
+                <label>Plate Cutout</label>
+                <select id="anprImgCutout" class="img-picker-select"><option value="">— none —</option></select>
+              </div>
+            </div>
+          </div>
           <div class="payload-preview-wrap">
             <label>Payload Preview</label>
             <pre id="preview-anpr" class="payload-preview"></pre>
@@ -274,6 +300,18 @@
               <div class="field-group">
                 <label>Entry Record ID <small>(exit only)</small></label>
                 <input type="text" id="parkInRecordId" placeholder="leave blank for entry" />
+              </div>
+            </div>
+          </div>
+          <div class="img-picker-group">
+            <div class="img-picker-row">
+              <div class="field-group">
+                <label>Normal Pic (scene)</label>
+                <select id="parkImgNormal" class="img-picker-select"><option value="">— none —</option></select>
+              </div>
+              <div class="field-group">
+                <label>Vehicle Pic</label>
+                <select id="parkImgVehicle" class="img-picker-select"><option value="">— none —</option></select>
               </div>
             </div>
           </div>
@@ -334,6 +372,16 @@
           <div class="send-actions">
             <button class="btn-send" id="btnSendAlarm">▶ SEND</button>
           </div>
+        </div>
+
+
+        <!-- Multi-Spot -->
+        <div class="tab-pane" id="tab-multispot">
+          <p class="tab-desc">Send parking detection events per spot → <code>/NotificationInfo/ParkingInfo</code></p>
+          <div class="ms-toolbar">
+            <button class="btn-sm" id="btnAddChannel">＋ Add Channel</button>
+          </div>
+          <div id="msChannels" class="ms-channels"></div>
         </div>
 
       </div><!-- /tab-content -->

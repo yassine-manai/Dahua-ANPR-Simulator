@@ -565,3 +565,568 @@ loadCameras();
     }
   });
 })();
+
+
+// ── Multi-Spot ────────────────────────────────────────────────────────────────
+// Channels/spots are stored inside the camera config (cam.channels).
+// Every structural change (add/remove channel or spot, edit label/id/plate)
+// is saved immediately via PUT /sim/cameras/:id so sim_config.json stays
+// in sync without a separate Save button.
+
+const MAX_SPOTS = 4;
+
+// Called whenever the active camera changes or the multispot tab is opened.
+function renderMultiSpot() {
+  const cam = activeCam();
+  if (!cam) return;
+
+  const channels = cam.channels || [];
+  const container = document.getElementById('msChannels');
+  container.innerHTML = '';
+
+  channels.forEach((ch, chIdx) => {
+    container.appendChild(buildChannelEl(cam, ch, chIdx));
+  });
+}
+
+// ── Build a channel block ─────────────────────────────────────────────────────
+function buildChannelEl(cam, ch, chIdx) {
+  const el = document.createElement('div');
+  el.className = 'ms-channel' + ((ch.spots || []).length >= MAX_SPOTS ? ' ms-full' : '');
+  el.dataset.chIdx = chIdx;
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.className = 'ms-channel-header';
+
+  const badge = document.createElement('span');
+  badge.className = 'ms-channel-badge';
+  badge.textContent = 'CH' + ch.channel_no;
+
+  const labelInput = document.createElement('input');
+  labelInput.className = 'ms-channel-label';
+  labelInput.type = 'text';
+  labelInput.value = ch.label || ('Channel ' + ch.channel_no);
+  labelInput.placeholder = 'Channel label';
+  labelInput.addEventListener('change', () => {
+    msPatch(cam, chIdx, null, { label: labelInput.value });
+  });
+
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'ms-channel-remove';
+  removeBtn.textContent = '✕';
+  removeBtn.title = 'Remove channel';
+  removeBtn.addEventListener('click', () => msRemoveChannel(cam, chIdx));
+
+  hdr.appendChild(badge);
+  hdr.appendChild(labelInput);
+  hdr.appendChild(removeBtn);
+
+  // Spots row
+  const row = document.createElement('div');
+  row.className = 'ms-spots-row';
+
+  (ch.spots || []).forEach((spot, sIdx) => {
+    row.appendChild(buildSpotCard(cam, ch, chIdx, spot, sIdx));
+  });
+
+  // Add-spot tile
+  const addTile = document.createElement('button');
+  addTile.className = 'ms-add-spot';
+  addTile.textContent = '+';
+  addTile.title = 'Add spot';
+  addTile.addEventListener('click', () => msAddSpot(cam, chIdx));
+  row.appendChild(addTile);
+
+  el.appendChild(hdr);
+  el.appendChild(row);
+  return el;
+}
+
+// ── Build a spot card ─────────────────────────────────────────────────────────
+function buildSpotCard(cam, ch, chIdx, spot, sIdx) {
+  const card = document.createElement('div');
+  card.className = 'ms-spot-card';
+
+  // Remove button
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'ms-spot-remove';
+  removeBtn.textContent = '✕';
+  removeBtn.title = 'Remove spot';
+  removeBtn.addEventListener('click', () => msRemoveSpot(cam, chIdx, sIdx));
+  card.appendChild(removeBtn);
+
+  // Spot ID field
+  const idWrap = document.createElement('div');
+  idWrap.className = 'ms-spot-field';
+  const idLabel = document.createElement('label');
+  idLabel.textContent = 'Spot ID';
+  const idInput = document.createElement('input');
+  idInput.className = 'ms-spot-input';
+  idInput.type = 'text';
+  idInput.value = spot.id || '';
+  idInput.placeholder = 'CH' + ch.channel_no + '-S' + (sIdx + 1);
+  idInput.addEventListener('change', () => {
+    msPatch(cam, chIdx, sIdx, { id: idInput.value });
+  });
+  idWrap.appendChild(idLabel);
+  idWrap.appendChild(idInput);
+  card.appendChild(idWrap);
+
+  // Image preview (shown when an image is selected)
+  const previewEl = document.createElement('div');
+  previewEl.className = 'ms-spot-preview';
+  const previewImg = document.createElement('img');
+  previewImg.className = 'ms-spot-preview-img';
+  previewEl.appendChild(previewImg);
+  card.appendChild(previewEl);
+
+  // Image picker
+  const imgWrap = document.createElement('div');
+  imgWrap.className = 'ms-spot-field';
+  const imgLabel = document.createElement('label');
+  imgLabel.textContent = 'Image';
+  const imgSel = document.createElement('select');
+  imgSel.className = 'ms-spot-input ms-spot-img-sel';
+  // Populate options from current library
+  imgSel.innerHTML = '<option value="">— none —</option>';
+  imgLib.list.forEach(img => {
+    const opt = document.createElement('option');
+    opt.value = img.id;
+    opt.textContent = img.name;
+    imgSel.appendChild(opt);
+  });
+  // Restore saved selection
+  if (spot.image_id) imgSel.value = spot.image_id;
+
+  // Show preview on load if image_id set
+  if (spot.image_id) msShowPreview(previewEl, previewImg, spot.image_id);
+
+  imgSel.addEventListener('change', () => {
+    const imgId = imgSel.value;
+    msPatch(cam, chIdx, sIdx, { image_id: imgId });
+    msShowPreview(previewEl, previewImg, imgId);
+  });
+  imgWrap.appendChild(imgLabel);
+  imgWrap.appendChild(imgSel);
+  card.appendChild(imgWrap);
+
+  // Plate field
+  const plateWrap = document.createElement('div');
+  plateWrap.className = 'ms-spot-field';
+  const plateLabel = document.createElement('label');
+  plateLabel.textContent = 'Plate';
+  const plateInput = document.createElement('input');
+  plateInput.className = 'ms-spot-input';
+  plateInput.type = 'text';
+  plateInput.value = spot.plate || '';
+  plateInput.placeholder = 'TN0000AA';
+  plateInput.addEventListener('change', () => {
+    msPatch(cam, chIdx, sIdx, { plate: plateInput.value });
+  });
+  plateWrap.appendChild(plateLabel);
+  plateWrap.appendChild(plateInput);
+  card.appendChild(plateWrap);
+
+  // Send button
+  const sendBtn = document.createElement('button');
+  sendBtn.className = 'ms-spot-send';
+  sendBtn.textContent = '▶ SEND';
+  sendBtn.addEventListener('click', () =>
+    msSendEvent(cam, ch, idInput.value || idInput.placeholder, plateInput.value, imgSel.value, card, statusEl)
+  );
+  card.appendChild(sendBtn);
+
+  // Status line
+  const statusEl = document.createElement('div');
+  statusEl.className = 'ms-spot-status';
+  card.appendChild(statusEl);
+
+  return card;
+}
+
+// Show/hide the preview thumbnail on a spot card
+function msShowPreview(previewEl, previewImg, imgId) {
+  if (!imgId) {
+    previewEl.style.display = 'none';
+    previewImg.src = '';
+    return;
+  }
+  previewEl.style.display = 'block';
+  // Use cached data if available
+  if (imgLib.data[imgId]) {
+    previewImg.src = 'data:image/*;base64,' + imgLib.data[imgId];
+    return;
+  }
+  // Fetch and cache
+  GET('/sim/images/' + imgId).then(full => {
+    if (full && full.data) {
+      imgLib.data[imgId] = full.data;
+      previewImg.src = 'data:image/*;base64,' + full.data;
+    }
+  });
+}
+
+// ── Send parking detection event ──────────────────────────────────────────────
+async function msSendEvent(cam, ch, spotId, plate, imageId, cardEl, statusEl) {
+  cardEl.classList.remove('sent-ok', 'sent-err');
+  cardEl.classList.add('sending');
+  statusEl.className = 'ms-spot-status';
+  statusEl.textContent = '…';
+
+  const now = nowStr();
+  const overrides = {
+    Picture: {
+      Plate: {
+        IsExist: !!plate,
+        PlateNumber: plate || '',
+        PlateColor: 'White',
+        PlateType: 'Normal',
+        Confidence: 85,
+        BoundingBox: [100, 200, 300, 260],
+      },
+    },
+    ParkingInfo: {
+      SnapTime:        now,
+      TimeZone:        2,
+      DSTTune:         0,
+      Channel:         ch.channel_no,
+      ParkingStallsNo: spotId,
+      Direction:       'Obverse',
+      ParkingStatus:   4,
+      AllowUser:       false,
+      BlockUser:       false,
+    },
+    DeviceID: cam.device_id,
+  };
+
+  // Attach this spot's own image if selected
+  if (imageId) {
+    const meta = imgLib.list.find(i => i.id === imageId);
+    const data = await imgResolve(imageId);
+    if (data && meta) {
+      overrides.Picture.NormalPic = { PicName: meta.name, Content: data };
+    }
+  }
+
+  try {
+    const res = await POST(`/sim/cameras/${cam.id}/send/parking`, { overrides });
+    cardEl.classList.remove('sending');
+    if (res.status && res.status < 300) {
+      cardEl.classList.add('sent-ok');
+      statusEl.className = 'ms-spot-status ok';
+      statusEl.textContent = res.status + ' OK';
+      setStatus(res.status);
+    } else {
+      cardEl.classList.add('sent-err');
+      statusEl.className = 'ms-spot-status err';
+      statusEl.textContent = res.status ? (res.status + ' ERR') : 'ERR';
+      setStatus(res.status || 0);
+    }
+  } catch (e) {
+    cardEl.classList.remove('sending');
+    cardEl.classList.add('sent-err');
+    statusEl.className = 'ms-spot-status err';
+    statusEl.textContent = 'NET ERR';
+    setStatus(0);
+  }
+
+  setTimeout(() => {
+    cardEl.classList.remove('sent-ok', 'sent-err');
+    statusEl.className = 'ms-spot-status';
+    statusEl.textContent = '';
+  }, 3000);
+}
+
+// ── Structural mutations — all auto-save ──────────────────────────────────────
+
+function msAddChannel(cam) {
+  const channels = cam.channels || [];
+  const nextNo = channels.length > 0
+    ? Math.max(...channels.map(c => c.channel_no)) + 1
+    : 0;
+  channels.push({
+    channel_no: nextNo,
+    label: 'Channel ' + nextNo,
+    spots: [],
+  });
+  cam.channels = channels;
+  msSave(cam);
+}
+
+function msRemoveChannel(cam, chIdx) {
+  if (!confirm('Remove this channel and all its spots?')) return;
+  cam.channels.splice(chIdx, 1);
+  msSave(cam);
+}
+
+function msAddSpot(cam, chIdx) {
+  const ch = cam.channels[chIdx];
+  if ((ch.spots || []).length >= MAX_SPOTS) return;
+  const sIdx = ch.spots.length;
+  const autoId = 'CH' + ch.channel_no + '-S' + (sIdx + 1);
+  const plate = msRandomPlate(cam);
+  ch.spots.push({ id: autoId, plate });
+  msSave(cam);
+}
+
+function msRemoveSpot(cam, chIdx, sIdx) {
+  cam.channels[chIdx].spots.splice(sIdx, 1);
+  msSave(cam);
+}
+
+// Patch a single field on a channel or spot and save.
+// chIdx: channel index, sIdx: spot index or null for channel-level patch.
+function msPatch(cam, chIdx, sIdx, fields) {
+  if (sIdx === null) {
+    Object.assign(cam.channels[chIdx], fields);
+  } else {
+    Object.assign(cam.channels[chIdx].spots[sIdx], fields);
+  }
+  msSaveQuiet(cam); // no re-render — inputs keep focus
+}
+
+// Save + re-render
+async function msSave(cam) {
+  await PUT(`/sim/cameras/${cam.id}`, cam);
+  // Refresh local state
+  const idx = state.cameras.findIndex(c => c.id === cam.id);
+  if (idx !== -1) state.cameras[idx] = cam;
+  renderMultiSpot();
+  renderCameraList();
+}
+
+// Save without re-render (used during inline edits)
+async function msSaveQuiet(cam) {
+  await PUT(`/sim/cameras/${cam.id}`, cam);
+  const idx = state.cameras.findIndex(c => c.id === cam.id);
+  if (idx !== -1) state.cameras[idx] = cam;
+}
+
+function msRandomPlate(cam) {
+  const pool = (cam.plate_pool || []).filter(p => p.trim());
+  if (!pool.length) return '';
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// ── Wire add-channel button ───────────────────────────────────────────────────
+document.getElementById('btnAddChannel').addEventListener('click', () => {
+  const cam = activeCam();
+  if (!cam) return;
+  msAddChannel(cam);
+});
+
+// ── Re-render multispot when its tab is activated ─────────────────────────────
+// Patch the existing tab click handler to call renderMultiSpot for this tab.
+document.querySelectorAll('.tab').forEach(tab => {
+  if (tab.dataset.tab === 'multispot') {
+    tab.addEventListener('click', () => {
+      if (state.activeCameraId) renderMultiSpot();
+    });
+  }
+});
+
+// Also render when camera is selected and multispot tab is already active.
+const _origSelectCamera = selectCamera;
+// Wrap selectCamera to also refresh multispot if that tab is visible
+window._msSelectHook = function() {
+  const activeTab = document.querySelector('.tab.active');
+  if (activeTab && activeTab.dataset.tab === 'multispot') {
+    renderMultiSpot();
+  }
+};
+
+// ── Image Library ─────────────────────────────────────────────────────────────
+// Global image state — loaded once, refreshed after add/delete.
+const imgLib = {
+  list: [],   // [{ id, name }] — meta only, no data
+  data: {},   // id → base64 string, lazy-loaded on first use
+};
+
+async function imgLoad() {
+  const meta = await GET('/sim/images');
+  imgLib.list = Array.isArray(meta) ? meta : [];
+  imgRenderThumbs();
+  imgPopulateSelects();
+  const countEl = document.getElementById('imgCount');
+  if (countEl) countEl.textContent = `(${imgLib.list.length}/20)`;
+  // Re-render multispot so spot card pickers reflect the updated library
+  const activeTab = document.querySelector('.tab.active');
+  if (activeTab && activeTab.dataset.tab === 'multispot') renderMultiSpot();
+}
+
+// ── Thumbnails in config panel ────────────────────────────────────────────────
+function imgRenderThumbs() {
+  const container = document.getElementById('imgThumbs');
+  if (!container) return;
+  container.innerHTML = '';
+  imgLib.list.forEach(img => {
+    const card = document.createElement('div');
+    card.className = 'img-thumb-card';
+
+    // Use cached data-URI if we have it, otherwise fetch
+    const src = imgLib.data[img.id]
+      ? 'data:image/*;base64,' + imgLib.data[img.id]
+      : '';
+
+    const thumb = document.createElement('img');
+    thumb.alt = img.name;
+    if (src) {
+      thumb.src = src;
+    } else {
+      // Lazy-load thumbnail
+      GET('/sim/images/' + img.id).then(full => {
+        if (full && full.data) {
+          imgLib.data[img.id] = full.data;
+          thumb.src = 'data:image/*;base64,' + full.data;
+        }
+      });
+    }
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'img-thumb-name';
+    nameEl.textContent = img.name;
+    nameEl.title = img.name;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'img-thumb-remove';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remove';
+    removeBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await DELETE('/sim/images/' + img.id);
+      delete imgLib.data[img.id];
+      await imgLoad();
+    });
+
+    card.appendChild(thumb);
+    card.appendChild(nameEl);
+    card.appendChild(removeBtn);
+    container.appendChild(card);
+  });
+}
+
+// ── Populate all image picker selects ────────────────────────────────────────
+const IMG_SELECTS = [
+  'anprImgNormal', 'anprImgVehicle', 'anprImgCutout',
+  'parkImgNormal', 'parkImgVehicle',
+];
+
+function imgPopulateSelects() {
+  IMG_SELECTS.forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value; // preserve current selection
+    sel.innerHTML = '<option value="">— none —</option>';
+    imgLib.list.forEach(img => {
+      const opt = document.createElement('option');
+      opt.value = img.id;
+      opt.textContent = img.name;
+      sel.appendChild(opt);
+    });
+    // Restore selection if still exists
+    if (cur && imgLib.list.find(i => i.id === cur)) sel.value = cur;
+  });
+}
+
+// ── Resolve an image id → base64 string (fetches if not cached) ───────────────
+async function imgResolve(id) {
+  if (!id) return null;
+  if (imgLib.data[id]) return imgLib.data[id];
+  const full = await GET('/sim/images/' + id);
+  if (full && full.data) {
+    imgLib.data[id] = full.data;
+    return full.data;
+  }
+  return null;
+}
+
+// Helper: build a PicItem object { PicName, Content } or null
+async function imgBuildPicItem(selectId) {
+  const sel = document.getElementById(selectId);
+  if (!sel || !sel.value) return null;
+  const id = sel.value;
+  const meta = imgLib.list.find(i => i.id === id);
+  const data = await imgResolve(id);
+  if (!data) return null;
+  return { PicName: meta ? meta.name : id, Content: data };
+}
+
+// ── File input handler ────────────────────────────────────────────────────────
+document.getElementById('imgFileInput').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+
+  const remaining = 20 - imgLib.list.length;
+  const toLoad = files.slice(0, remaining);
+  if (toLoad.length < files.length) {
+    alert(`Library is limited to 20 images. Loading first ${toLoad.length} file(s).`);
+  }
+
+  const entries = await Promise.all(toLoad.map(file => new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // Strip data-URI prefix — store raw base64
+      const raw = reader.result.split(',')[1] || reader.result;
+      resolve({ name: file.name, data: raw });
+    };
+    reader.readAsDataURL(file);
+  })));
+
+  const res = await POST('/sim/images', entries);
+  // Cache the data we just uploaded so no re-fetch needed
+  if (res && res.images) {
+    res.images.forEach(img => {
+      const match = entries.find(e => e.name === img.name);
+      if (match) imgLib.data[img.id] = match.data;
+    });
+  }
+  e.target.value = ''; // allow re-selecting same files
+  await imgLoad();
+});
+
+// ── Patch buildANPROverrides to include images ────────────────────────────────
+// We shadow the original with an async version used by the send button.
+async function buildANPROverridesWithImages() {
+  const base = buildANPROverrides();
+  const normalPic  = await imgBuildPicItem('anprImgNormal');
+  const vehiclePic = await imgBuildPicItem('anprImgVehicle');
+  const cutoutPic  = await imgBuildPicItem('anprImgCutout');
+  if (normalPic)  base.Picture.NormalPic  = normalPic;
+  if (vehiclePic) base.Picture.VehiclePic = vehiclePic;
+  if (cutoutPic)  base.Picture.CutoutPic  = cutoutPic;
+  return base;
+}
+
+// ── Patch buildParkingOverrides to include images ─────────────────────────────
+async function buildParkingOverridesWithImages() {
+  const base = buildParkingOverrides();
+  const normalPic  = await imgBuildPicItem('parkImgNormal');
+  const vehiclePic = await imgBuildPicItem('parkImgVehicle');
+  if (normalPic)  base.Picture.NormalPic  = normalPic;
+  if (vehiclePic) base.Picture.VehiclePic = vehiclePic;
+  return base;
+}
+
+// ── Re-wire ANPR send button to use async version ─────────────────────────────
+document.getElementById('btnSendANPR').addEventListener('click', async () => {
+  if (!state.activeCameraId) return;
+  const overrides = await buildANPROverridesWithImages();
+  const res = await POST(`/sim/cameras/${state.activeCameraId}/send/anpr`, { overrides });
+  setStatus(res.status);
+}, { capture: true }); // capture:true fires before the original listener added earlier
+
+// ── Re-wire Parking send button ───────────────────────────────────────────────
+document.getElementById('btnSendParking').addEventListener('click', async () => {
+  if (!state.activeCameraId) return;
+  const overrides = await buildParkingOverridesWithImages();
+  const res = await POST(`/sim/cameras/${state.activeCameraId}/send/parking`, { overrides });
+  setStatus(res.status);
+}, { capture: true });
+
+// ── Patch msSendEvent to include NormalPic if a global image is selected ──────
+// Multi-spot: add a per-spot image picker is complex; instead, a single
+// "Scene image for all spots" selector lives at the top of the multispot tab.
+// We inject it into index.html programmatically here.
+// ── Init image library ────────────────────────────────────────────────────────
+imgLoad();
