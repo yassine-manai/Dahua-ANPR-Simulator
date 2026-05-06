@@ -1,0 +1,12 @@
+services:
+  simulator:
+    build: .
+    container_name: dahua-its-simulator
+    ports:
+      - "9090:9090"
+    volumes:
+      # Persist sim_config.json across container restarts
+      - ./data:/app/data
+    environment:
+      - CONFIG_PATH=/app/data/sim_config.json
+    restart: unless-stopped

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dahua ITS Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="topbar-logo">▣</span>
+      <span class="topbar-title">DAHUA ITS <span class="accent">SIMULATOR</span></span>
+      <span class="topbar-version">ITSAPI v1.22</span>
+    </div>
+    <div class="topbar-right">
+      <button class="btn-theme" id="btnTheme" title="Toggle dark / light mode">☀</button>
+      <span class="status-dot" id="globalStatus"></span>
+      <span id="globalStatusText" class="status-text">IDLE</span>
+    </div>
+  </header>
+
+  <!-- Main layout: 3 columns -->
+  <div class="workspace">
+
+    <!-- COL 1: Camera List -->
+    <aside class="col-cameras">
+      <div class="panel-header">
+        <span>CAMERAS</span>
+        <button class="btn-icon" id="btnAddCamera" title="Add camera">＋</button>
+      </div>
+      <div id="cameraList" class="camera-list"></div>
+    </aside>
+
+    <!-- COL 2: Config Panel -->
+    <section class="col-config">
+      <div class="panel-header">
+        <span>CONFIG</span>
+        <span id="configCameraLabel" class="panel-label">— select a camera —</span>
+      </div>
+      <div id="configPanel" class="config-panel disabled">
+
+        <div class="field-group">
+          <label>Label</label>
+          <input type="text" id="cfgLabel" placeholder="Gate A – Entry" />
+        </div>
+        <div class="field-group">
+          <label>Backend URL</label>
+          <input type="text" id="cfgBackendURL" placeholder="http://localhost:8080" />
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label>Device ID</label>
+            <input type="text" id="cfgDeviceID" placeholder="UUID" />
+          </div>
+          <button class="btn-sm" id="btnGenUUID">GEN</button>
+        </div>
+        <div class="field-group">
+          <label>Device Name</label>
+          <input type="text" id="cfgDeviceName" placeholder="DH-ITC205" />
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label>Model</label>
+            <input type="text" id="cfgDeviceModel" placeholder="DH-ITC205" />
+          </div>
+          <div class="field-group">
+            <label>Type</label>
+            <select id="cfgDeviceType">
+              <option value="Tollgate">Tollgate (ANPR)</option>
+              <option value="E-Police">E-Police</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label>Manufacturer</label>
+            <input type="text" id="cfgManufacturer" placeholder="Dahua" />
+          </div>
+          <div class="field-group">
+            <label>IP Address</label>
+            <input type="text" id="cfgIPAddress" placeholder="192.168.1.108" />
+          </div>
+        </div>
+
+        <div class="section-divider">HEARTBEAT</div>
+        <div class="field-row">
+          <div class="field-group">
+            <label>Interval (s)</label>
+            <input type="number" id="cfgHeartbeatInterval" value="30" min="5" />
+          </div>
+          <div class="hb-controls">
+            <button class="btn-green" id="btnHBStart">▶ START</button>
+            <button class="btn-red" id="btnHBStop">■ STOP</button>
+          </div>
+        </div>
+        <div id="hbStatus" class="hb-status">● STOPPED</div>
+
+        <div class="section-divider">PLATE POOL</div>
+        <div class="field-group">
+          <label>Plates (one per line)</label>
+          <textarea id="cfgPlatePool" rows="4" placeholder="TN1234AA&#10;TN5678BB&#10;TN9999ZZ"></textarea>
+        </div>
+
+        <div class="config-actions">
+          <button class="btn-primary" id="btnSaveConfig">💾 SAVE CONFIG</button>
+          <button class="btn-danger" id="btnDeleteCamera">🗑 DELETE</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- COL 3: Send Panel -->
+    <section class="col-send">
+      <div class="panel-header">
+        <span>SEND</span>
+        <span id="sendCameraLabel" class="panel-label">— select a camera —</span>
+      </div>
+
+      <!-- Tabs -->
+      <div class="send-tabs">
+        <button class="tab active" data-tab="deviceinfo">DevInfo</button>
+        <button class="tab" data-tab="keepalive">Heartbeat</button>
+        <button class="tab" data-tab="anpr">ANPR</button>
+        <button class="tab" data-tab="parking">Parking</button>
+        <button class="tab" data-tab="alarm">Alarm</button>
+      </div>
+
+      <!-- Tab content -->
+      <div id="tabContent" class="tab-content disabled">
+
+        <!-- DeviceInfo -->
+        <div class="tab-pane active" id="tab-deviceinfo">
+          <p class="tab-desc">Push device registration to <code>/NotificationInfo/DeviceInfo</code></p>
+          <div class="payload-preview-wrap">
+            <label>Payload Preview</label>
+            <pre id="preview-deviceinfo" class="payload-preview"></pre>
+          </div>
+          <div class="send-actions">
+            <button class="btn-send" id="btnSendDevInfo">▶ SEND</button>
+          </div>
+        </div>
+
+        <!-- Heartbeat -->
+        <div class="tab-pane" id="tab-keepalive">
+          <p class="tab-desc">Manual heartbeat to <code>/NotificationInfo/KeepAlive</code></p>
+          <div class="payload-preview-wrap">
+            <label>Payload Preview</label>
+            <pre id="preview-keepalive" class="payload-preview"></pre>
+          </div>
+          <div class="send-actions">
+            <button class="btn-send" id="btnSendKA">▶ SEND ONCE</button>
+          </div>
+        </div>
+
+        <!-- ANPR -->
+        <div class="tab-pane" id="tab-anpr">
+          <p class="tab-desc">Push ANPR capture to <code>/NotificationInfo/TollgateInfo</code></p>
+          <div class="anpr-fields">
+            <div class="field-row">
+              <div class="field-group">
+                <label>Plate Number</label>
+                <input type="text" id="anprPlate" placeholder="TN1234AA" />
+              </div>
+              <div class="field-group">
+                <label>Plate Color</label>
+                <select id="anprPlateColor">
+                  <option>White</option><option>Yellow</option><option>Blue</option>
+                  <option>Black</option><option>Green</option><option>Red</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label>Plate Type</label>
+                <select id="anprPlateType">
+                  <option>Normal</option><option>Yellow</option><option>Police</option>
+                  <option>Military</option><option>Embassy</option><option>Moto</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label>Direction</label>
+                <select id="anprDirection">
+                  <option value="Obverse">Obverse (in)</option>
+                  <option value="Reverse">Reverse (out)</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label>Vehicle Color</label>
+                <select id="anprVehicleColor">
+                  <option>White</option><option>Black</option><option>Silver</option>
+                  <option>Red</option><option>Blue</option><option>Gray</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label>Vehicle Type</label>
+                <select id="anprVehicleType">
+                  <option>PassengerCar</option><option>SUV</option><option>MPV</option>
+                  <option>Bus</option><option>LargeTruck</option><option>Motor</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label>Lane No</label>
+                <input type="number" id="anprLane" value="1" min="1" />
+              </div>
+              <div class="field-group">
+                <label>Open Strobe</label>
+                <select id="anprStrobe">
+                  <option value="false">No</option>
+                  <option value="true">Yes</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="payload-preview-wrap">
+            <label>Payload Preview</label>
+            <pre id="preview-anpr" class="payload-preview"></pre>
+          </div>
+          <div class="send-actions">
+            <button class="btn-send" id="btnSendANPR">▶ SEND</button>
+            <div class="auto-send-wrap">
+              <button class="btn-auto" id="btnAutoANPR">⟳ AUTO</button>
+              <select id="autoANPRInterval">
+                <option value="5">5s</option>
+                <option value="10" selected>10s</option>
+                <option value="30">30s</option>
+                <option value="60">60s</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Parking -->
+        <div class="tab-pane" id="tab-parking">
+          <p class="tab-desc">Push parking event to <code>/NotificationInfo/ParkingInfo</code></p>
+          <div class="anpr-fields">
+            <div class="field-row">
+              <div class="field-group">
+                <label>Plate Number</label>
+                <input type="text" id="parkPlate" placeholder="TN1234AA" />
+              </div>
+              <div class="field-group">
+                <label>Stall No</label>
+                <input type="text" id="parkStall" placeholder="A01" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label>Status</label>
+                <select id="parkStatus">
+                  <option value="0">0 – Vehicle enters</option>
+                  <option value="1">1 – Vehicle leaves</option>
+                  <option value="2">2 – Unknown</option>
+                  <option value="3">3 – Illegal parking</option>
+                  <option value="4">4 – Parking detection</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label>Direction</label>
+                <select id="parkDirection">
+                  <option value="Obverse">Obverse</option>
+                  <option value="Reverse">Reverse</option>
+                  <option value="Unknow">Unknown</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label>Entry Record ID <small>(exit only)</small></label>
+                <input type="text" id="parkInRecordId" placeholder="leave blank for entry" />
+              </div>
+            </div>
+          </div>
+          <div class="payload-preview-wrap">
+            <label>Payload Preview</label>
+            <pre id="preview-parking" class="payload-preview"></pre>
+          </div>
+          <div class="send-actions">
+            <button class="btn-send" id="btnSendParking">▶ SEND</button>
+          </div>
+        </div>
+
+        <!-- Alarm -->
+        <div class="tab-pane" id="tab-alarm">
+          <p class="tab-desc">Push alarm to <code>/NotificationInfo/AlarmInfo</code></p>
+          <div class="anpr-fields">
+            <div class="field-row">
+              <div class="field-group">
+                <label>Alarm Type</label>
+                <select id="alarmType">
+                  <option value="0">0 – ParkingOverload</option>
+                  <option value="1">1 – AcrossParking</option>
+                  <option value="2">2 – Reverse parking</option>
+                  <option value="3">3 – Timeout parking</option>
+                  <option value="4">4 – Lack of parking</option>
+                  <option value="5">5 – Parking without license</option>
+                  <option value="6">6 – NonMotor Parking</option>
+                  <option value="7">7 – Illegal parking</option>
+                  <option value="8">8 – No Parking</option>
+                  <option value="9">9 – Blocklist parking</option>
+                  <option value="99">99 – Other</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label>State</label>
+                <select id="alarmState">
+                  <option value="Pluse">Pluse</option>
+                  <option value="Start">Start</option>
+                  <option value="Stop">Stop</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label>Stall No</label>
+                <input type="text" id="alarmStall" placeholder="A01" />
+              </div>
+              <div class="field-group">
+                <label>Plate Number</label>
+                <input type="text" id="alarmPlate" placeholder="TN1234AA" />
+              </div>
+            </div>
+          </div>
+          <div class="payload-preview-wrap">
+            <label>Payload Preview</label>
+            <pre id="preview-alarm" class="payload-preview"></pre>
+          </div>
+          <div class="send-actions">
+            <button class="btn-send" id="btnSendAlarm">▶ SEND</button>
+          </div>
+        </div>
+
+      </div><!-- /tab-content -->
+    </section>
+  </div><!-- /workspace -->
+
+  <!-- Log panel -->
+  <div class="log-panel">
+    <div class="log-header">
+      <span>REQUEST LOG</span>
+      <span id="logCameraLabel" class="panel-label"></span>
+      <button class="btn-sm" id="btnClearLog">🗑 CLEAR</button>
+    </div>
+    <div id="logEntries" class="log-entries"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
