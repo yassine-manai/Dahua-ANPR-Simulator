@@ -2,7 +2,7 @@
   "cameras": [
     {
       "id": "cam_1778087142327",
-      "label": "New Camera",
+      "label": "DAHUA ITS - 44",
       "backend_url": "http://127.0.0.1:9898",
       "device_id": "0e2d1915-eb07-4ee7-a660-52b50aea8086",
       "device_name": "DH-ITC205",
@@ -15,7 +15,8 @@
       "password": "",
       "heartbeat_interval": 30,
       "plate_pool": [
-        "ABG145"
+        "ABG145",
+        "AFD3663"
       ]
     }
   ]
