@@ -932,7 +932,7 @@ button {
 }
 .ms-spot-preview-img {
   width: 100%;
-  height: 72px;
+  height: 160px;
   object-fit: cover;
   display: block;
 }
@@ -945,4 +945,145 @@ button {
   background-position: right 6px center;
   padding-right: 20px;
   cursor: pointer;
+}
+
+/* ── Tab image picker previews (ANPR / Parking tabs) ─────────────────────── */
+.tab-img-preview {
+  display: none;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--bg3);
+  width: 100%;
+}
+.tab-img-preview.visible { display: block; }
+.tab-img-preview img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── ImgPicker custom dropdown ───────────────────────────────────────────── */
+.imgpicker-wrap {
+  position: relative;
+  width: 100%;
+}
+
+/* Trigger button */
+.imgpicker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 28px 4px 6px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+  text-align: left;
+  position: relative;
+  min-height: 28px;
+  transition: border-color 0.15s;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.imgpicker-trigger:hover,
+.imgpicker-trigger.open { border-color: var(--accent); }
+
+.imgpicker-trigger-thumb {
+  width: 32px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+.imgpicker-trigger-ph {
+  font-size: 12px;
+  color: var(--text3);
+  flex-shrink: 0;
+}
+.imgpicker-trigger-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text2);
+}
+.imgpicker-arrow {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text3);
+  font-size: 10px;
+  pointer-events: none;
+  transition: transform 0.15s;
+}
+.imgpicker-trigger.open .imgpicker-arrow {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+/* Dropdown panel */
+.imgpicker-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 200;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.imgpicker-panel.open { display: block; }
+
+/* Option row */
+.imgpicker-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-bottom: 1px solid var(--bg3);
+}
+.imgpicker-opt:last-child { border-bottom: none; }
+.imgpicker-opt:hover { background: var(--bg3); }
+.imgpicker-opt.selected { background: var(--bg3); }
+.imgpicker-opt.selected .imgpicker-opt-label { color: var(--accent); }
+
+.imgpicker-opt-thumb {
+  width: 40px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+}
+.imgpicker-opt-thumb-loading {
+  opacity: 0.4;
+}
+.imgpicker-opt-nothumb {
+  width: 40px;
+  height: 28px;
+  flex-shrink: 0;
+}
+.imgpicker-opt-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }

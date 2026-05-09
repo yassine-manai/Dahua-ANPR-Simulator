@@ -108,6 +108,8 @@ function fillConfig(cam) {
   document.getElementById('cfgDeviceType').value        = cam.device_type || 'Tollgate';
   document.getElementById('cfgManufacturer').value      = cam.manufacturer || 'Dahua';
   document.getElementById('cfgIPAddress').value         = cam.ip_address || '';
+  document.getElementById('cfgIPv6Address').value       = cam.ipv6_address || '';
+  document.getElementById('cfgMACAddress').value        = cam.mac_address || '';
   document.getElementById('cfgHeartbeatInterval').value = cam.heartbeat_interval || 30;
   document.getElementById('cfgPlatePool').value         = (cam.plate_pool || []).join('\n');
 }
@@ -125,6 +127,8 @@ function readConfig() {
     device_type:        document.getElementById('cfgDeviceType').value,
     manufacturer:       document.getElementById('cfgManufacturer').value.trim(),
     ip_address:         document.getElementById('cfgIPAddress').value.trim(),
+    ipv6_address:       document.getElementById('cfgIPv6Address').value.trim(),
+    mac_address:        document.getElementById('cfgMACAddress').value.trim(),
     heartbeat_interval: parseInt(document.getElementById('cfgHeartbeatInterval').value) || 30,
     plate_pool:         plates,
   };
@@ -245,45 +249,65 @@ async function sendANPR() {
 }
 
 function buildANPROverrides() {
-  const plate  = document.getElementById('anprPlate').value.trim();
-  const color  = document.getElementById('anprPlateColor').value;
-  const type   = document.getElementById('anprPlateType').value;
-  const dir    = document.getElementById('anprDirection').value;
-  const vColor = document.getElementById('anprVehicleColor').value;
-  const vType  = document.getElementById('anprVehicleType').value;
-  const lane   = parseInt(document.getElementById('anprLane').value) || 1;
-  const strobe = document.getElementById('anprStrobe').value === 'true';
+  const plate       = document.getElementById('anprPlate').value.trim();
+  const color       = document.getElementById('anprPlateColor').value;
+  const type        = document.getElementById('anprPlateType').value;
+  const region      = document.getElementById('anprRegion').value.trim();
+  const dir         = document.getElementById('anprDirection').value;
+  const trigger     = document.getElementById('anprTrigger').value;
+  const vColor      = document.getElementById('anprVehicleColor').value;
+  const vType       = document.getElementById('anprVehicleType').value;
+  const vSign       = document.getElementById('anprVehicleSign').value.trim();
+  const speed       = parseInt(document.getElementById('anprSpeed').value) || 0;
+  const lane        = parseInt(document.getElementById('anprLane').value) || 1;
+  const channel     = parseInt(document.getElementById('anprChannel').value) || 0;
+  const strobe      = document.getElementById('anprStrobe').value === 'true';
+  const peopleNum   = parseInt(document.getElementById('anprPeopleNum').value) || 0;
+  const defCode     = document.getElementById('anprDefenceCode').value.trim() || 'SIM001';
+  const snapAddr    = document.getElementById('anprSnapAddress').value.trim();
+  const cam         = activeCam();
+
+  const plateObj = {
+    IsExist:     !!plate,
+    PlateNumber: plate,
+    PlateColor:  color,
+    PlateType:   type,
+    Confidence:  90,
+    BoundingBox: [100, 200, 300, 260],
+    Channel:     channel,
+  };
+  if (region) plateObj.Region = region;
+
+  const vehicleObj = {
+    VehicleColor: vColor,
+    VehicleType:  vType,
+  };
+  if (vSign)  vehicleObj.VehicleSign = vSign;
+  if (speed)  vehicleObj.Speed = speed;
+
+  const snapInfo = {
+    TriggerSource: trigger,
+    SnapTime:      nowStr(),
+    AccurateTime:  nowMsStr(),
+    TimeZone:      2,
+    DSTTune:       0,
+    LanNo:         lane,
+    Direction:     dir,
+    OpenStrobe:    strobe,
+    AllowUser:     false,
+    BlockUser:     false,
+    DefenceCode:   defCode,
+    DeviceID:      cam?.device_id || '',
+  };
+  if (snapAddr)   snapInfo.SnapAddress    = snapAddr;
+  if (peopleNum)  snapInfo.InCarPeopleNum = peopleNum;
 
   return {
     Picture: {
-      Plate: {
-        IsExist: !!plate,
-        PlateNumber: plate,
-        PlateColor: color,
-        PlateType: type,
-        Confidence: 90,
-        BoundingBox: [100, 200, 300, 260],
-        Channel: 0,
-      },
-      Vehicle: {
-        VehicleColor: vColor,
-        VehicleType: vType,
-      },
+      Plate:   plateObj,
+      Vehicle: vehicleObj,
     },
-    SnapInfo: {
-      TriggerSource: 'Video',
-      SnapTime: nowStr(),
-      AccurateTime: nowMsStr(),
-      TimeZone: 2,
-      DSTTune: 0,
-      LanNo: lane,
-      Direction: dir,
-      OpenStrobe: strobe,
-      AllowUser: false,
-      BlockUser: false,
-      DefenceCode: 'SIM001',
-      DeviceID: activeCam()?.device_id || '',
-    },
+    SnapInfo: snapInfo,
   };
 }
 
@@ -317,39 +341,58 @@ document.getElementById('btnSendParking').addEventListener('click', async () => 
 });
 
 function buildParkingOverrides() {
-  const plate     = document.getElementById('parkPlate').value.trim();
-  const stall     = document.getElementById('parkStall').value.trim();
-  const status    = parseInt(document.getElementById('parkStatus').value);
-  const direction = document.getElementById('parkDirection').value;
-  const inRecord  = document.getElementById('parkInRecordId').value.trim();
+  const plate      = document.getElementById('parkPlate').value.trim();
+  const plateColor = document.getElementById('parkPlateColor').value;
+  const plateType  = document.getElementById('parkPlateType').value;
+  const region     = document.getElementById('parkRegion').value.trim();
+  const stall      = document.getElementById('parkStall').value.trim();
+  const channel    = parseInt(document.getElementById('parkChannel').value) || 0;
+  const status     = parseInt(document.getElementById('parkStatus').value);
+  const direction  = document.getElementById('parkDirection').value;
+  const vColor     = document.getElementById('parkVehicleColor').value;
+  const vType      = document.getElementById('parkVehicleType').value;
+  const vSign      = document.getElementById('parkVehicleSign').value.trim();
+  const inRecord   = document.getElementById('parkInRecordId').value.trim();
+  const cam        = activeCam();
+
+  const plateObj = {
+    IsExist:     !!plate,
+    PlateNumber: plate,
+    PlateColor:  plateColor,
+    PlateType:   plateType,
+    Confidence:  85,
+    BoundingBox: [100, 200, 300, 260],
+  };
+  if (region) plateObj.Region = region;
+
+  const vehicleObj = { VehicleColor: vColor, VehicleType: vType };
+  if (vSign) vehicleObj.VehicleSign = vSign;
 
   const info = {
     SnapTime:        nowStr(),
     TimeZone:        2,
     DSTTune:         0,
-    Channel:         0,
-    ParkingStallsNo: stall || 'A01',
+    Channel:         channel,
+    ParkingStallsNo: stall || '',
     Direction:       direction,
     ParkingStatus:   status,
     AllowUser:       false,
     BlockUser:       false,
   };
-  if (inRecord) info.inRecordId = inRecord;
 
-  return {
+  const payload = {
     Picture: {
-      Plate: {
-        IsExist: !!plate,
-        PlateNumber: plate,
-        PlateColor: 'White',
-        PlateType: 'Normal',
-        Confidence: 85,
-        BoundingBox: [100, 200, 300, 260],
-      },
+      Plate:   plateObj,
+      Vehicle: vehicleObj,
     },
     ParkingInfo: info,
-    DeviceID: activeCam()?.device_id || '',
+    DeviceID: cam?.device_id || '',
   };
+
+  // inRecordId is at root level per spec
+  if (inRecord) payload.inRecordId = inRecord;
+
+  return payload;
 }
 
 // ── Send: Alarm ───────────────────────────────────────────────────────────────
@@ -385,14 +428,17 @@ function buildAlarmOverrides() {
 // ── Payload previews ──────────────────────────────────────────────────────────
 function refreshAllPreviews(cam) {
   // DevInfo preview
-  document.getElementById('preview-deviceinfo').textContent = JSON.stringify({
+  const devInfoPayload = {
     DeviceName:   cam.device_name,
     DeviceModel:  cam.device_model,
     DeviceType:   cam.device_type,
     Manufacturer: cam.manufacturer,
-    IPAddress:    cam.ip_address,
     DeviceID:     cam.device_id,
-  }, null, 2);
+  };
+  if (cam.ip_address)   devInfoPayload.IPAddress   = cam.ip_address;
+  if (cam.ipv6_address) devInfoPayload.IPv6Address = cam.ipv6_address;
+  if (cam.mac_address)  devInfoPayload.MACAddress  = cam.mac_address;
+  document.getElementById('preview-deviceinfo').textContent = JSON.stringify(devInfoPayload, null, 2);
 
   // Heartbeat preview
   document.getElementById('preview-keepalive').textContent = JSON.stringify({
@@ -411,12 +457,12 @@ function refreshAllPreviews(cam) {
 }
 
 // Live preview update on field change
-['anprPlate','anprPlateColor','anprPlateType','anprDirection','anprVehicleColor','anprVehicleType','anprLane','anprStrobe'].forEach(id => {
+['anprPlate','anprPlateColor','anprPlateType','anprRegion','anprDirection','anprTrigger','anprVehicleColor','anprVehicleType','anprVehicleSign','anprSpeed','anprLane','anprChannel','anprStrobe','anprPeopleNum','anprDefenceCode','anprSnapAddress'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', () => {
     document.getElementById('preview-anpr').textContent = JSON.stringify(buildANPROverrides(), null, 2);
   });
 });
-['parkPlate','parkStall','parkStatus','parkDirection','parkInRecordId'].forEach(id => {
+['parkPlate','parkPlateColor','parkPlateType','parkRegion','parkStall','parkChannel','parkStatus','parkDirection','parkVehicleColor','parkVehicleType','parkVehicleSign','parkInRecordId'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', () => {
     document.getElementById('preview-parking').textContent = JSON.stringify(buildParkingOverrides(), null, 2);
   });
@@ -686,9 +732,9 @@ function buildSpotCard(cam, ch, chIdx, spot, sIdx) {
   imgWrap.className = 'ms-spot-field';
   const imgLabel = document.createElement('label');
   imgLabel.textContent = 'Image';
+
+  // Hidden select — ImgPicker wraps this
   const imgSel = document.createElement('select');
-  imgSel.className = 'ms-spot-input ms-spot-img-sel';
-  // Populate options from current library
   imgSel.innerHTML = '<option value="">— none —</option>';
   imgLib.list.forEach(img => {
     const opt = document.createElement('option');
@@ -696,20 +742,20 @@ function buildSpotCard(cam, ch, chIdx, spot, sIdx) {
     opt.textContent = img.name;
     imgSel.appendChild(opt);
   });
-  // Restore saved selection
   if (spot.image_id) imgSel.value = spot.image_id;
 
-  // Show preview on load if image_id set
-  if (spot.image_id) msShowPreview(previewEl, previewImg, spot.image_id);
-
-  imgSel.addEventListener('change', () => {
-    const imgId = imgSel.value;
-    msPatch(cam, chIdx, sIdx, { image_id: imgId });
-    msShowPreview(previewEl, previewImg, imgId);
-  });
   imgWrap.appendChild(imgLabel);
   imgWrap.appendChild(imgSel);
   card.appendChild(imgWrap);
+
+  // Mount ImgPicker on the select — it injects its own UI around the hidden select
+  const spotPicker = new ImgPicker(imgSel, (imgId) => {
+    msPatch(cam, chIdx, sIdx, { image_id: imgId });
+    msShowPreview(previewEl, previewImg, imgId);
+  });
+
+  // Show preview on load if image_id was already set
+  if (spot.image_id) msShowPreview(previewEl, previewImg, spot.image_id);
 
   // Plate field
   const plateWrap = document.createElement('div');
@@ -732,9 +778,16 @@ function buildSpotCard(cam, ch, chIdx, spot, sIdx) {
   const sendBtn = document.createElement('button');
   sendBtn.className = 'ms-spot-send';
   sendBtn.textContent = '▶ SEND';
-  sendBtn.addEventListener('click', () =>
-    msSendEvent(cam, ch, idInput.value || idInput.placeholder, plateInput.value, imgSel.value, card, statusEl)
-  );
+  sendBtn.addEventListener('click', () => {
+    // Always read fresh state — avoids stale closure values
+    const freshCam   = activeCam() || cam;
+    const freshCh    = (freshCam.channels || [])[chIdx] || ch;
+    const freshSpot  = (freshCh.spots || [])[sIdx] || {};
+    const spotId     = idInput.value.trim() || idInput.placeholder;
+    const plate      = plateInput.value.trim() || freshSpot.plate || '';
+    const imgId      = imgSel.value || freshSpot.image_id || '';
+    msSendEvent(freshCam, freshCh, spotId, plate, imgId, card, statusEl);
+  });
   card.appendChild(sendBtn);
 
   // Status line
@@ -778,13 +831,14 @@ async function msSendEvent(cam, ch, spotId, plate, imageId, cardEl, statusEl) {
   const overrides = {
     Picture: {
       Plate: {
-        IsExist: !!plate,
+        IsExist:     !!plate,
         PlateNumber: plate || '',
-        PlateColor: 'White',
-        PlateType: 'Normal',
-        Confidence: 85,
+        PlateColor:  'White',
+        PlateType:   'Normal',
+        Confidence:  85,
         BoundingBox: [100, 200, 300, 260],
       },
+      Vehicle: {},
     },
     ParkingInfo: {
       SnapTime:        now,
@@ -1006,7 +1060,221 @@ function imgRenderThumbs() {
   });
 }
 
-// ── Populate all image picker selects ────────────────────────────────────────
+// ── ImgPicker — custom dropdown with thumbnails ───────────────────────────────
+// Wraps a hidden <select> so all existing .value reads keep working.
+// Also updates the paired tab-img-preview div when selection changes.
+const TAB_PICKER_PREVIEWS = {
+  anprImgNormal:  'prevAnprNormal',
+  anprImgVehicle: 'prevAnprVehicle',
+  anprImgCutout:  'prevAnprCutout',
+  parkImgNormal:  'prevParkNormal',
+  parkImgVehicle: 'prevParkVehicle',
+};
+
+class ImgPicker {
+  // selectEl  — the hidden <select> to mirror
+  // onChange  — optional extra callback(imgId)
+  constructor(selectEl, onChange) {
+    this.sel      = selectEl;
+    this.onChange = onChange || null;
+    this._build();
+    // Close on outside click
+    this._onDocClick = (e) => {
+      if (!this.root.contains(e.target)) this._close();
+    };
+    document.addEventListener('click', this._onDocClick);
+  }
+
+  _build() {
+    // Wrap the hidden select in a relative container
+    const wrapper = document.createElement('div');
+    wrapper.className = 'imgpicker-wrap';
+    this.sel.parentNode.insertBefore(wrapper, this.sel);
+    wrapper.appendChild(this.sel);
+    this.sel.style.display = 'none';
+
+    // Trigger button
+    this.trigger = document.createElement('button');
+    this.trigger.type = 'button';
+    this.trigger.className = 'imgpicker-trigger';
+    this.trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._toggle();
+    });
+    wrapper.appendChild(this.trigger);
+
+    // Dropdown panel
+    this.panel = document.createElement('div');
+    this.panel.className = 'imgpicker-panel';
+    wrapper.appendChild(this.panel);
+
+    this.root = wrapper;
+    this._renderTrigger();
+    this._renderOptions();
+  }
+
+  _renderTrigger() {
+    const imgId = this.sel.value;
+    const meta  = imgId ? imgLib.list.find(i => i.id === imgId) : null;
+    this.trigger.innerHTML = '';
+
+    if (meta && imgLib.data[imgId]) {
+      const thumb = document.createElement('img');
+      thumb.src = 'data:image/*;base64,' + imgLib.data[imgId];
+      thumb.className = 'imgpicker-trigger-thumb';
+      this.trigger.appendChild(thumb);
+    } else if (meta) {
+      // Fetch then re-render
+      imgResolve(imgId).then(() => this._renderTrigger());
+      const ph = document.createElement('span');
+      ph.className = 'imgpicker-trigger-ph';
+      ph.textContent = '🖼';
+      this.trigger.appendChild(ph);
+    } else {
+      const ph = document.createElement('span');
+      ph.className = 'imgpicker-trigger-ph';
+      ph.textContent = '— none —';
+      this.trigger.appendChild(ph);
+    }
+
+    const name = document.createElement('span');
+    name.className = 'imgpicker-trigger-name';
+    name.textContent = meta ? meta.name : '';
+    this.trigger.appendChild(name);
+
+    const arrow = document.createElement('span');
+    arrow.className = 'imgpicker-arrow';
+    arrow.textContent = '▾';
+    this.trigger.appendChild(arrow);
+  }
+
+  _renderOptions() {
+    this.panel.innerHTML = '';
+
+    // None option
+    const noneRow = this._makeRow('', null, '— none —');
+    noneRow.addEventListener('click', () => this._select(''));
+    this.panel.appendChild(noneRow);
+
+    imgLib.list.forEach(img => {
+      const row = this._makeRow(img.id, imgLib.data[img.id] || null, img.name);
+      // Lazy-load thumb for this row if not cached
+      if (!imgLib.data[img.id]) {
+        imgResolve(img.id).then(data => {
+          if (data) {
+            const thumbEl = row.querySelector('.imgpicker-opt-thumb');
+            if (thumbEl) thumbEl.src = 'data:image/*;base64,' + data;
+          }
+        });
+      }
+      row.addEventListener('click', () => this._select(img.id));
+      if (img.id === this.sel.value) row.classList.add('selected');
+      this.panel.appendChild(row);
+    });
+  }
+
+  _makeRow(id, data, name) {
+    const row = document.createElement('div');
+    row.className = 'imgpicker-opt';
+    row.dataset.id = id;
+
+    if (id && data) {
+      const thumb = document.createElement('img');
+      thumb.className = 'imgpicker-opt-thumb';
+      thumb.src = 'data:image/*;base64,' + data;
+      row.appendChild(thumb);
+    } else if (id) {
+      const thumb = document.createElement('img');
+      thumb.className = 'imgpicker-opt-thumb imgpicker-opt-thumb-loading';
+      row.appendChild(thumb);
+    } else {
+      const ph = document.createElement('div');
+      ph.className = 'imgpicker-opt-nothumb';
+      row.appendChild(ph);
+    }
+
+    const label = document.createElement('span');
+    label.className = 'imgpicker-opt-label';
+    label.textContent = name;
+    row.appendChild(label);
+    return row;
+  }
+
+  _select(imgId) {
+    this.sel.value = imgId;
+    // Fire native change so existing listeners (imgBuildPicItem etc.) still work
+    this.sel.dispatchEvent(new Event('change', { bubbles: true }));
+    this._renderTrigger();
+    this._renderOptions();
+    this._close();
+    if (this.onChange) this.onChange(imgId);
+    // Update the paired large preview if this is a tab picker
+    tabPickerUpdatePreview(this.sel.id, imgId);
+  }
+
+  _toggle() {
+    this.panel.classList.toggle('open');
+    this.trigger.classList.toggle('open');
+  }
+
+  _close() {
+    this.panel.classList.remove('open');
+    this.trigger.classList.remove('open');
+  }
+
+  // Called after imgLib refreshes — rebuild options and trigger
+  refresh() {
+    // Preserve current value
+    const cur = this.sel.value;
+    // Rebuild <option> list in hidden select
+    this.sel.innerHTML = '<option value="">— none —</option>';
+    imgLib.list.forEach(img => {
+      const opt = document.createElement('option');
+      opt.value = img.id;
+      opt.textContent = img.name;
+      this.sel.appendChild(opt);
+    });
+    if (cur && imgLib.list.find(i => i.id === cur)) this.sel.value = cur;
+    else this.sel.value = '';
+    this._renderTrigger();
+    this._renderOptions();
+    tabPickerUpdatePreview(this.sel.id, this.sel.value);
+  }
+
+  destroy() {
+    document.removeEventListener('click', this._onDocClick);
+  }
+}
+
+// Registry of active ImgPicker instances keyed by select ID
+const imgPickers = {};
+
+// ── Show or hide the large preview below a tab picker ─────────────────────────
+function tabPickerUpdatePreview(selectId, imgId) {
+  const previewId = TAB_PICKER_PREVIEWS[selectId];
+  if (!previewId) return;
+  const previewEl = document.getElementById(previewId);
+  if (!previewEl) return;
+  const imgEl = previewEl.querySelector('img');
+  if (!imgId) {
+    previewEl.classList.remove('visible');
+    imgEl.src = '';
+    return;
+  }
+  previewEl.classList.add('visible');
+  if (imgLib.data[imgId]) {
+    imgEl.src = 'data:image/*;base64,' + imgLib.data[imgId];
+    return;
+  }
+  GET('/sim/images/' + imgId).then(full => {
+    if (full && full.data) {
+      imgLib.data[imgId] = full.data;
+      imgEl.src = 'data:image/*;base64,' + full.data;
+    }
+  });
+}
+
+// ── Init tab pickers (ANPR + Parking tabs) ────────────────────────────────────
 const IMG_SELECTS = [
   'anprImgNormal', 'anprImgVehicle', 'anprImgCutout',
   'parkImgNormal', 'parkImgVehicle',
@@ -1014,18 +1282,21 @@ const IMG_SELECTS = [
 
 function imgPopulateSelects() {
   IMG_SELECTS.forEach(id => {
-    const sel = document.getElementById(id);
-    if (!sel) return;
-    const cur = sel.value; // preserve current selection
-    sel.innerHTML = '<option value="">— none —</option>';
-    imgLib.list.forEach(img => {
-      const opt = document.createElement('option');
-      opt.value = img.id;
-      opt.textContent = img.name;
-      sel.appendChild(opt);
-    });
-    // Restore selection if still exists
-    if (cur && imgLib.list.find(i => i.id === cur)) sel.value = cur;
+    if (imgPickers[id]) {
+      imgPickers[id].refresh();
+    } else {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      // Populate hidden select options first
+      sel.innerHTML = '<option value="">— none —</option>';
+      imgLib.list.forEach(img => {
+        const opt = document.createElement('option');
+        opt.value = img.id;
+        opt.textContent = img.name;
+        sel.appendChild(opt);
+      });
+      imgPickers[id] = new ImgPicker(sel);
+    }
   });
 }
 

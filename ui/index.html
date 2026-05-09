@@ -85,6 +85,16 @@
             <input type="text" id="cfgIPAddress" placeholder="192.168.1.108" />
           </div>
         </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label>IPv6 Address</label>
+            <input type="text" id="cfgIPv6Address" placeholder="::" />
+          </div>
+          <div class="field-group">
+            <label>MAC Address</label>
+            <input type="text" id="cfgMACAddress" placeholder="AA:BB:CC:DD:EE:FF" />
+          </div>
+        </div>
 
         <div class="section-divider">HEARTBEAT</div>
         <div class="field-row">
@@ -191,10 +201,23 @@
                 </select>
               </div>
               <div class="field-group">
+                <label>Region <small>(ISO 3166)</small></label>
+                <input type="text" id="anprRegion" placeholder="TN" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
                 <label>Direction</label>
                 <select id="anprDirection">
                   <option value="Obverse">Obverse (in)</option>
                   <option value="Reverse">Reverse (out)</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label>Trigger Source</label>
+                <select id="anprTrigger">
+                  <option>Video</option><option>Coil</option>
+                  <option>Radar</option><option>Unknown</option>
                 </select>
               </div>
             </div>
@@ -216,15 +239,45 @@
             </div>
             <div class="field-row">
               <div class="field-group">
+                <label>Vehicle Brand</label>
+                <input type="text" id="anprVehicleSign" placeholder="Toyota" />
+              </div>
+              <div class="field-group">
+                <label>Speed <small>(km/h)</small></label>
+                <input type="number" id="anprSpeed" value="0" min="0" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
                 <label>Lane No</label>
                 <input type="number" id="anprLane" value="1" min="1" />
               </div>
+              <div class="field-group">
+                <label>Channel</label>
+                <input type="number" id="anprChannel" value="0" min="0" />
+              </div>
+            </div>
+            <div class="field-row">
               <div class="field-group">
                 <label>Open Strobe</label>
                 <select id="anprStrobe">
                   <option value="false">No</option>
                   <option value="true">Yes</option>
                 </select>
+              </div>
+              <div class="field-group">
+                <label>People in Car</label>
+                <input type="number" id="anprPeopleNum" value="0" min="0" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label>Defence Code</label>
+                <input type="text" id="anprDefenceCode" placeholder="SIM001" />
+              </div>
+              <div class="field-group">
+                <label>Snap Address</label>
+                <input type="text" id="anprSnapAddress" placeholder="Gate A" />
               </div>
             </div>
           </div>
@@ -233,14 +286,17 @@
               <div class="field-group">
                 <label>Normal Pic (scene)</label>
                 <select id="anprImgNormal" class="img-picker-select"><option value="">— none —</option></select>
+                <div class="tab-img-preview" id="prevAnprNormal"><img /></div>
               </div>
               <div class="field-group">
                 <label>Vehicle Pic</label>
                 <select id="anprImgVehicle" class="img-picker-select"><option value="">— none —</option></select>
+                <div class="tab-img-preview" id="prevAnprVehicle"><img /></div>
               </div>
               <div class="field-group">
                 <label>Plate Cutout</label>
                 <select id="anprImgCutout" class="img-picker-select"><option value="">— none —</option></select>
+                <div class="tab-img-preview" id="prevAnprCutout"><img /></div>
               </div>
             </div>
           </div>
@@ -272,8 +328,34 @@
                 <input type="text" id="parkPlate" placeholder="TN1234AA" />
               </div>
               <div class="field-group">
+                <label>Plate Color</label>
+                <select id="parkPlateColor">
+                  <option>White</option><option>Yellow</option><option>Blue</option>
+                  <option>Black</option><option>Green</option><option>Red</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label>Plate Type</label>
+                <select id="parkPlateType">
+                  <option>Normal</option><option>Yellow</option><option>Police</option>
+                  <option>Military</option><option>Embassy</option><option>Moto</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label>Region <small>(ISO 3166)</small></label>
+                <input type="text" id="parkRegion" placeholder="TN" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
                 <label>Stall No</label>
                 <input type="text" id="parkStall" placeholder="A01" />
+              </div>
+              <div class="field-group">
+                <label>Channel</label>
+                <input type="number" id="parkChannel" value="0" min="0" />
               </div>
             </div>
             <div class="field-row">
@@ -298,6 +380,26 @@
             </div>
             <div class="field-row">
               <div class="field-group">
+                <label>Vehicle Color</label>
+                <select id="parkVehicleColor">
+                  <option>White</option><option>Black</option><option>Silver</option>
+                  <option>Red</option><option>Blue</option><option>Gray</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label>Vehicle Type</label>
+                <select id="parkVehicleType">
+                  <option>PassengerCar</option><option>SUV</option><option>MPV</option>
+                  <option>Bus</option><option>LargeTruck</option><option>Motor</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label>Vehicle Brand</label>
+                <input type="text" id="parkVehicleSign" placeholder="Toyota" />
+              </div>
+              <div class="field-group">
                 <label>Entry Record ID <small>(exit only)</small></label>
                 <input type="text" id="parkInRecordId" placeholder="leave blank for entry" />
               </div>
@@ -308,10 +410,12 @@
               <div class="field-group">
                 <label>Normal Pic (scene)</label>
                 <select id="parkImgNormal" class="img-picker-select"><option value="">— none —</option></select>
+                <div class="tab-img-preview" id="prevParkNormal"><img /></div>
               </div>
               <div class="field-group">
                 <label>Vehicle Pic</label>
                 <select id="parkImgVehicle" class="img-picker-select"><option value="">— none —</option></select>
+                <div class="tab-img-preview" id="prevParkVehicle"><img /></div>
               </div>
             </div>
           </div>

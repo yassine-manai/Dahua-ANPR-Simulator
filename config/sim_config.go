@@ -46,9 +46,11 @@ type CameraConfig struct {
 	DeviceID          string          `json:"device_id"`
 	DeviceName        string          `json:"device_name"`
 	DeviceModel       string          `json:"device_model"`
-	DeviceType        string          `json:"device_type"`
+	DeviceType        string          `json:"device_type"`   // "Tollgate" | "E-Police"
 	Manufacturer      string          `json:"manufacturer"`
 	IPAddress         string          `json:"ip_address"`
+	IPv6Address       string          `json:"ipv6_address"`
+	MACAddress        string          `json:"mac_address"`
 	AuthEnabled       bool            `json:"auth_enabled"`
 	Username          string          `json:"username"`
 	Password          string          `json:"password"`
