@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -27,19 +28,26 @@ type LogEntry struct {
 }
 
 type runtimeCamera struct {
-	stopHeartbeat chan struct{}
-	log           []LogEntry
-	logMu         sync.Mutex
+	stopHeartbeat   chan struct{}
+	log             []LogEntry
+	logMu           sync.Mutex
+	lastSentPayload map[string]interface{}
 }
 
 type Handler struct {
-	cfg     *config.SimConfig
-	mu      sync.Mutex
-	runtime map[string]*runtimeCamera
+	cfg                *config.SimConfig
+	mu                 sync.Mutex
+	runtime            map[string]*runtimeCamera
+	pendingManualSnaps map[string]int // camera ID → channel
+	pendingMu          sync.Mutex
 }
 
 func New(cfg *config.SimConfig) *Handler {
-	h := &Handler{cfg: cfg, runtime: make(map[string]*runtimeCamera)}
+	h := &Handler{
+		cfg:                cfg,
+		runtime:            make(map[string]*runtimeCamera),
+		pendingManualSnaps: make(map[string]int),
+	}
 	for _, cam := range cfg.All() {
 		h.runtime[cam.ID] = &runtimeCamera{}
 	}
@@ -83,6 +91,10 @@ func (h *Handler) AddCamera(c *gin.Context) {
 	if cam.ID == "" {
 		cam.ID = fmt.Sprintf("cam_%d", time.Now().UnixNano())
 	}
+	if cam.DeviceID != "" && h.cfg.ExistsByDeviceID(cam.DeviceID) {
+		c.JSON(http.StatusConflict, gin.H{"error": "device_id already exists"})
+		return
+	}
 	h.cfg.Upsert(cam)
 	if err := h.cfg.Save(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -93,7 +105,8 @@ func (h *Handler) AddCamera(c *gin.Context) {
 
 func (h *Handler) UpdateCamera(c *gin.Context) {
 	id := c.Param("id")
-	if _, ok := h.cfg.Get(id); !ok {
+	existing, ok := h.cfg.Get(id)
+	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "camera not found"})
 		return
 	}
@@ -103,6 +116,10 @@ func (h *Handler) UpdateCamera(c *gin.Context) {
 		return
 	}
 	cam.ID = id
+	if cam.DeviceID != "" && cam.DeviceID != existing.DeviceID && h.cfg.ExistsByDeviceID(cam.DeviceID) {
+		c.JSON(http.StatusConflict, gin.H{"error": "device_id already exists"})
+		return
+	}
 	h.cfg.Upsert(cam)
 	if err := h.cfg.Save(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -242,26 +259,26 @@ func (h *Handler) SendANPR(c *gin.Context) {
 				IsExist:     false,
 				PlateNumber: "",
 				PlateColor:  "White",
-				PlateType:   "Normal",
+				PlateType:   "",
 				Confidence:  0,
 				BoundingBox: []int{0, 0, 0, 0},
 				Channel:     0,
 			},
 			Vehicle: &models.ANPRVehicle{},
-		},
-		SnapInfo: models.ANPRSnapInfo{
-			TriggerSource: "Video",
-			SnapTime:      now.Format("2006-01-02 15:04:05"),
-			AccurateTime:  now.Format("2006-01-02 15:04:05.000"),
-			TimeZone:      2,
-			DSTTune:       0,
-			LanNo:         1,
-			Direction:     "Obverse",
-			OpenStrobe:    false,
-			AllowUser:     false,
-			BlockUser:     false,
-			DefenceCode:   "SIM001",
-			DeviceID:      cam.DeviceID,
+			SnapInfo: models.ANPRSnapInfo{
+				TriggerSource: "Video",
+				SnapTime:      now.Format("2006-01-02 15:04:05"),
+				AccurateTime:  now.Format("2006-01-02 15:04:05.000"),
+				TimeZone:      2,
+				DSTTune:       0,
+				LanNo:         1,
+				Direction:     "Obverse",
+				OpenStrobe:    false,
+				AllowUser:     false,
+				BlockUser:     false,
+				DefenceCode:   "SIM001",
+				DeviceID:      cam.DeviceID,
+			},
 		},
 	}
 	merged := h.merge(c, payload)
@@ -282,24 +299,24 @@ func (h *Handler) SendParking(c *gin.Context) {
 				IsExist:     false,
 				PlateNumber: "",
 				PlateColor:  "White",
-				PlateType:   "Normal",
+				PlateType:   "",
 				Confidence:  0,
 				BoundingBox: []int{0, 0, 0, 0},
 			},
 			Vehicle: &models.ParkingVehicle{},
+			ParkingInfo: models.ParkingInfo{
+				SnapTime:        now.Format("2006-01-02 15:04:05"),
+				TimeZone:        2,
+				DSTTune:         0,
+				Channel:         0,
+				ParkingStallsNo: "",
+				Direction:       "Obverse",
+				ParkingStatus:   0,
+				AllowUser:       false,
+				BlockUser:       false,
+				DeviceID:        cam.DeviceID,
+			},
 		},
-		ParkingInfo: models.ParkingInfo{
-			SnapTime:        now.Format("2006-01-02 15:04:05"),
-			TimeZone:        2,
-			DSTTune:         0,
-			Channel:         0,
-			ParkingStallsNo: "",
-			Direction:       "Obverse",
-			ParkingStatus:   0,
-			AllowUser:       false,
-			BlockUser:       false,
-		},
-		DeviceID: cam.DeviceID,
 	}
 	merged := h.merge(c, payload)
 	status, res, err := h.post(cam, "/NotificationInfo/ParkingInfo", merged)
@@ -384,6 +401,336 @@ func (h *Handler) DeleteImage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": c.Param("id")})
+}
+
+// ── ManSnap / LPN Confirmation ────────────────────────────────────────────────
+
+type PendingConfirmView struct {
+	CameraID     string                 `json:"camera_id"`
+	CameraLabel  string                 `json:"camera_label"`
+	CameraIP     string                 `json:"camera_ip"`
+	Channel      int                    `json:"channel"`
+	LastPayload  map[string]interface{} `json:"last_payload"`
+	DeviceID     string                 `json:"device_id"`
+	ResponseType string                 `json:"response_type"` // "with_last_payload" or "manual_lpn"
+	LastPlate    string                 `json:"last_plate"`
+}
+
+func (h *Handler) ManualSnap(c *gin.Context) {
+	action := c.Query("action")
+	if action != "" && action != "manSnap" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported action"})
+		return
+	}
+
+	camID := c.Query("cam_id")
+	if camID == "" {
+		camID = c.Query("device_id")
+	}
+	if camID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing cam_id or device_id"})
+		return
+	}
+
+	channelStr := c.DefaultQuery("channel", "0")
+	channel, err := strconv.Atoi(channelStr)
+	if err != nil || channel < 0 || channel > 3 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid channel, must be 0-3"})
+		return
+	}
+	channel = channel + 1
+
+	var cam config.CameraConfig
+	var found bool
+	for _, cc := range h.cfg.All() {
+		if cc.DeviceID == camID {
+			cam = cc
+			found = true
+			break
+		}
+	}
+	if !found {
+		if cc, ok := h.cfg.Get(camID); ok {
+			cam = cc
+			found = true
+		}
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, gin.H{"error": "camera not found"})
+		return
+	}
+
+	rt := h.rt(cam.ID)
+
+	// get last payload
+	rt.logMu.Lock()
+	lastPayload := rt.lastSentPayload
+	rt.logMu.Unlock()
+
+	if lastPayload == nil {
+		now := time.Now()
+		lastPayload = map[string]interface{}{
+			"Picture": map[string]interface{}{
+				"Plate": map[string]interface{}{
+					"IsExist":     false,
+					"PlateNumber": "",
+					"PlateColor":  "White",
+					"PlateType":   "",
+					"Confidence":  0,
+					"BoundingBox": []int{0, 0, 0, 0},
+				},
+				"Vehicle": map[string]interface{}{
+					"VehicleColor": "White",
+					"VehicleType":  "PassengerCar",
+				},
+				"SnapInfo": map[string]interface{}{
+					"Source":       "Video",
+					"SnapTime":     now.Format("2006-01-02 15:04:05"),
+					"AccurateTime": now.Format("2006-01-02 15:04:05.000"),
+					"TimeZone":     2,
+					"DSTTune":      0,
+					"LanNo":        1,
+					"Direction":    "Obverse",
+					"OpenStrobe":   false,
+					"AllowUser":    false,
+					"BlockUser":    false,
+					"DefenceCode":  "SIM001",
+					"DeviceID":     cam.DeviceID,
+				},
+			},
+		}
+	}
+
+	h.pendingMu.Lock()
+	h.pendingManualSnaps[cam.ID] = channel
+	h.pendingMu.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{})
+}
+
+func (h *Handler) GetPendingConfirmations(c *gin.Context) {
+	h.pendingMu.Lock()
+	defer h.pendingMu.Unlock()
+
+	out := []PendingConfirmView{}
+	for camID, channel := range h.pendingManualSnaps {
+		cam, ok := h.cfg.Get(camID)
+		if !ok {
+			continue
+		}
+		rt := h.rt(camID)
+		rt.logMu.Lock()
+		lp := rt.lastSentPayload
+		rt.logMu.Unlock()
+
+		responseType := "with_last_payload"
+		if lp == nil {
+			responseType = "manual_lpn"
+			lp = map[string]interface{}{
+				"Picture": map[string]interface{}{
+					"Plate": map[string]interface{}{
+						"IsExist":     false,
+						"PlateNumber": "",
+						"PlateColor":  "White",
+						"PlateType":   "",
+						"Confidence":  0,
+						"BoundingBox": []int{0, 0, 0, 0},
+					},
+					"Vehicle": map[string]interface{}{
+						"VehicleColor": "White",
+						"VehicleType":  "PassengerCar",
+					},
+					"SnapInfo": map[string]interface{}{
+						"Source":      "Video",
+						"TimeZone":    2,
+						"DSTTune":     0,
+						"LanNo":       1,
+						"Direction":   "Obverse",
+						"OpenStrobe":  false,
+						"AllowUser":   false,
+						"BlockUser":   false,
+						"DefenceCode": "SIM001",
+						"DeviceID":    cam.DeviceID,
+					},
+				},
+			}
+		}
+
+		lastPlate := ""
+		if lp != nil {
+			if pic, ok := lp["Picture"].(map[string]interface{}); ok {
+				if plate, ok := pic["Plate"].(map[string]interface{}); ok {
+					if pn, ok := plate["PlateNumber"].(string); ok {
+						lastPlate = pn
+					}
+				}
+			}
+		}
+
+		out = append(out, PendingConfirmView{
+			CameraID:     camID,
+			CameraLabel:  cam.Label,
+			CameraIP:     cam.IPAddress,
+			Channel:      channel,
+			LastPayload:  lp,
+			DeviceID:     cam.DeviceID,
+			ResponseType: responseType,
+			LastPlate:    lastPlate,
+		})
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+type ConfirmLPNRequest struct {
+	CameraID    string `json:"camera_id"`
+	PlateNumber string `json:"plate_number"`
+	Mode        string `json:"mode"` // "reuse_last" (default) or "fake"
+}
+
+func (h *Handler) ConfirmLPN(c *gin.Context) {
+	var req ConfirmLPNRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.CameraID == "" || req.PlateNumber == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "camera_id and plate_number are required"})
+		return
+	}
+
+	cam, ok := h.cfg.Get(req.CameraID)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "camera not found"})
+		return
+	}
+
+	h.pendingMu.Lock()
+	ch, exists := h.pendingManualSnaps[req.CameraID]
+	rt := h.rt(cam.ID)
+	if !exists {
+		h.pendingMu.Unlock()
+		c.JSON(http.StatusNotFound, gin.H{"error": "no pending manual snap for this camera"})
+		return
+	}
+	delete(h.pendingManualSnaps, req.CameraID)
+	h.pendingMu.Unlock()
+
+	now := time.Now()
+
+	// build fresh default payload regardless of mode
+	payload := map[string]interface{}{
+		"Picture": map[string]interface{}{
+			"Plate": map[string]interface{}{
+				"IsExist":     true,
+				"PlateNumber": req.PlateNumber,
+				"PlateColor":  "White",
+				"PlateType":   "",
+				"Confidence":  90,
+				"BoundingBox": []int{100, 200, 300, 260},
+				"Channel":     ch - 1,
+			},
+			"Vehicle": map[string]interface{}{
+				"VehicleColor":       "White",
+				"VehicleType":        "PassengerCar",
+				"VehicleBoundingBox": []int{0, 0, 0, 0},
+			},
+			"SnapInfo": map[string]interface{}{
+				"Source":       "Realtime",
+				"SnapTime":     now.Format("2006-01-02 15:04:05"),
+				"AccurateTime": now.Format("2006-01-02 15:04:05.000"),
+				"TimeZone":     2,
+				"DSTTune":      0,
+				"LanNo":        1,
+				"Direction":    "Obverse",
+				"OpenStrobe":   false,
+				"AllowUser":    false,
+				"BlockUser":    false,
+				"DefenceCode":  "SIM001",
+				"DeviceID":     cam.DeviceID,
+			},
+		},
+	}
+
+	// "reuse_last" — start from last payload to preserve images, then override plate
+	if req.Mode == "reuse_last" || req.Mode == "" {
+		rt.logMu.Lock()
+		lp := rt.lastSentPayload
+		rt.logMu.Unlock()
+
+		if lp != nil {
+			data, _ := json.Marshal(lp)
+			json.Unmarshal(data, &payload)
+		}
+		pic, _ := payload["Picture"].(map[string]interface{})
+		if pic == nil {
+			pic = map[string]interface{}{}
+			payload["Picture"] = pic
+		}
+		pic["Plate"] = map[string]interface{}{
+			"IsExist":     true,
+			"PlateNumber": req.PlateNumber,
+			"PlateColor":  "White",
+			"PlateType":   "",
+			"Confidence":  90,
+			"BoundingBox": []int{100, 200, 300, 260},
+			"Channel":     ch - 1,
+		}
+		if _, ok := pic["Vehicle"]; !ok {
+			pic["Vehicle"] = map[string]interface{}{
+				"VehicleColor":       "White",
+				"VehicleType":        "PassengerCar",
+				"VehicleBoundingBox": []int{0, 0, 0, 0},
+			}
+		}
+		pic["SnapInfo"] = map[string]interface{}{
+			"Source":       "Realtime",
+			"SnapTime":     now.Format("2006-01-02 15:04:05"),
+			"AccurateTime": now.Format("2006-01-02 15:04:05.000"),
+			"TimeZone":     2,
+			"DSTTune":      0,
+			"LanNo":        1,
+			"Direction":    "Obverse",
+			"OpenStrobe":   false,
+			"AllowUser":    false,
+			"BlockUser":    false,
+			"DefenceCode":  "SIM001",
+			"DeviceID":     cam.DeviceID,
+		}
+	}
+
+	// POST to backend as TollgateInfo
+	status, res, err := h.post(cam, "/NotificationInfo/TollgateInfo", payload)
+
+	// store as last sent payload
+	rt.logMu.Lock()
+	rt.lastSentPayload = payload
+	rt.logMu.Unlock()
+
+	// log the outbound request
+	errStr := ""
+	if err != nil {
+		errStr = err.Error()
+	}
+	reqBody, _ := json.Marshal(payload)
+	resBody := ""
+	if err == nil {
+		resBody = string(res)
+	}
+	h.appendLog(cam.ID, LogEntry{
+		Time:       now.Format("2006-01-02 15:04:05"),
+		Endpoint:   "/NotificationInfo/TollgateInfo",
+		Method:     "POST",
+		ReqBody:    string(reqBody),
+		ResBody:    resBody,
+		StatusCode: status,
+		Error:      errStr,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"confirmed": true,
+		"camera_id": req.CameraID,
+		"status":    status,
+	})
 }
 
 // ── internals ─────────────────────────────────────────────────────────────────
@@ -501,6 +848,16 @@ func (h *Handler) logAndRespond(
 	b, _ := json.Marshal(payload)
 	e.ReqBody = string(b)
 	h.appendLog(cameraID, e)
+
+	// store last sent payload for ManSnap confirmation
+	if err == nil && payload != nil {
+		if m, ok := payload.(map[string]interface{}); ok {
+			rt := h.rt(cameraID)
+			rt.logMu.Lock()
+			rt.lastSentPayload = m
+			rt.logMu.Unlock()
+		}
+	}
 
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{

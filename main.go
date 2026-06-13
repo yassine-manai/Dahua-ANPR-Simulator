@@ -46,6 +46,13 @@ func main() {
 	sim.POST("/cameras/:id/send/parking", h.SendParking)
 	sim.POST("/cameras/:id/send/alarm", h.SendAlarm)
 
+	// ── LPN Confirmation (ManSnap) ──────────────────────────────────────────────
+	sim.GET("/cgi-bin/trafficSnap.cgi", h.ManualSnap)
+	r.GET("/cgi-bin/trafficSnap.cgi", h.ManualSnap)
+
+	sim.GET("/pending-confirmations", h.GetPendingConfirmations)
+	sim.POST("/confirm-lpn", h.ConfirmLPN)
+
 	// ── Image library ─────────────────────────────────────────────────────────
 	sim.GET("/images", h.ListImages)
 	sim.POST("/images", h.AddImages)
@@ -53,7 +60,7 @@ func main() {
 	sim.DELETE("/images/:id", h.DeleteImage)
 
 	addr := ":9797"
-	fmt.Printf("\n🎥  Dahua ITS Simulator  →  http://localhost%s\n\n", addr)
+	fmt.Printf("\n  Dahua ITS Simulator  →  http://localhost%s\n\n", addr)
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}

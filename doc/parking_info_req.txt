@@ -1,0 +1,62 @@
+<= DAHUA REQUEST
+────────────────────────────────────
+Method   : POST
+Path     : /NotificationInfo/ParkingInfo
+Client IP: 20.0.0.70
+Size     : 636466 bytes
+Type     : application/json
+Body ↓
+{
+  "Picture": {
+    "CutoutPic": {
+      "Content": "[BASE64_IMAGE_REMOVED]",
+      "PicName": "FP137WM-20260604024432-plate.jpg"
+    },
+    "NormalPic": {
+      "Content": "[BASE64_IMAGE_REMOVED]",
+      "Height": 1684,
+      "PicName": "FP137WM-20260604024432.jpg",
+      "Width": 2880
+    },
+    "ParkingInfo": {
+      "AllowUser": false,
+      "Channel": 0,
+      "DSTTune": 0,
+      "DetectRegionName": "",
+      "DeviceID": "4711",
+      "Direction": "Unknow",
+      "ParkingStallsNo": "1",
+      "ParkingStatus": 0,
+      "Relationship": null,
+      "SnapTime": "2026-06-04 02:44:32",
+      "TimeZone": 13,
+      "inRecordId": ""
+    },
+    "Plate": {
+      "BoundingBox": [
+        1305,
+        899,
+        1591,
+        1041
+      ],
+      "IsExist": true,
+      "PlateColor": "White",
+      "PlateNumber": "FP137WM",
+      "PlateType": "",
+      "Region": "SVK"
+    },
+    "Vehicle": {
+      "VehicleBoundingBox": [
+        705,
+        529,
+        1814,
+        1453
+      ],
+      "VehicleColor": "White",
+      "VehicleSeries": "Other",
+      "VehicleSign": "Toyota",
+      "VehicleType": "SUV"
+    }
+  }
+}
+──────────────────────────

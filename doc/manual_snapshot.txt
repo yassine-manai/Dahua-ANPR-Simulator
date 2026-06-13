@@ -1,0 +1,43 @@
+here the sezrver will call the camera not the camera wll call the server 
+so here the server wil lcall the simulator that act like camera and the simulator will do the logic and validation based on the cam_id passed ,
+ bcz the simulator will act like multi camera, also when the server call the camera for manual snapshot it show popup in interface to give the user the choice it wll response with the same request data or input his own lpn that will returned with toolgate api 
+
+ the manual snapshot alws respond with toolgate body 
+
+
+ func ManualSnapshot(ip string, channel int, username, password, cam_id string) (int, error) {
+	log.Trace().Str("ip", ip).Int("cam-channel", channel).Msg("Sending manual snapshot command")
+
+	// increment channel
+	channel = channel + 1
+
+	// validate channel
+	if channel < 1 || channel > 4 {
+		return 500, fmt.Errorf("invalid channel: %d", channel)
+	}
+
+	// build URL
+	url := fmt.Sprintf(
+		"http://%s/cgi-bin/trafficSnap.cgi?action=manSnap&channel=%d&cam_id=%d",
+		ip,
+		channel,
+        cam_id,
+	)
+
+	log.Trace().Str("url", url).Int("Channel+1", channel).Str("Username", username).Str("Password", password).Msg("Constructed CGI URL for manual snapshot")
+
+	// send request - digest auth
+	dr := digest.NewRequest(username, password, "GET", url, "")
+	resp, err := dr.Execute()
+	if err != nil {
+		return 500, err
+	}
+	defer resp.Body.Close()
+
+	// check response
+	if resp.StatusCode != http.StatusOK {
+		return resp.StatusCode, fmt.Errorf("unexpected status: %s", resp.Status)
+	}
+
+	return resp.StatusCode, nil
+}

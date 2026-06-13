@@ -1,0 +1,61 @@
+<= DAHUA REQUEST
+────────────────────────────────────
+Method   : POST
+Path     : /NotificationInfo/TollgateInfo
+Client IP: 20.0.0.70
+Size     : 664157 bytes
+Type     : application/json
+Body ↓
+{
+  "Picture": {
+    "CutoutPic": {
+      "Content": "[BASE64_IMAGE_REMOVED]",
+      "PicName": "FP137WM-20260604024433-plate.jpg"
+    },
+    "NormalPic": {
+      "Content": "[BASE64_IMAGE_REMOVED]",
+      "PicName": "FP137WM-20260604024433.jpg"
+    },
+    "Plate": {
+      "BoundingBox": [
+        1305,
+        904,
+        1591,
+        1046
+      ],
+      "Channel": 0,
+      "IsExist": true,
+      "PlateColor": "White",
+      "PlateNumber": "FP137WM",
+      "PlateType": "",
+      "Region": "SVK",
+      "UploadNum": 4
+    },
+    "SnapInfo": {
+      "AccurateTime": "2026-06-04 02:44:33.263",
+      "AllowUser": false,
+      "AllowUserEndTime": "",
+      "DSTTune": 0,
+      "DefenceCode": "YhfH6zQ81V3VaMBb",
+      "DeviceID": "4711",
+      "InCarPeopleNum": 1,
+      "LanNo": 1,
+      "OpenStrobe": false,
+      "SnapTime": "2026-06-04 02:44:33",
+      "Source": "Realtime",
+      "TimeZone": 13
+    },
+    "Vehicle": {
+      "VehicleBoundingBox": [
+        705,
+        537,
+        1814,
+        1464
+      ],
+      "VehicleColor": "White",
+      "VehicleSeries": "Other",
+      "VehicleSign": "Toyota",
+      "VehicleType": "SUV"
+    }
+  }
+}

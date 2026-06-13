@@ -38,10 +38,8 @@ type HeartbeatReply struct {
 // ── 5.3 ANPR / TollgateInfo ──────────────────────────────────────────────────
 
 // ANPRPayload is the full body for POST /NotificationInfo/TollgateInfo.
-// Top-level keys: Picture + SnapInfo (DeviceID and InCarPeopleNum live in SnapInfo).
 type ANPRPayload struct {
-	Picture  ANPRPicture  `json:"Picture"`
-	SnapInfo ANPRSnapInfo `json:"SnapInfo"`
+	Picture ANPRPicture `json:"Picture"`
 }
 
 // ANPRPicture holds all image sub-types for a tollgate capture.
@@ -53,6 +51,7 @@ type ANPRPicture struct {
 	FacePic    []ANPRFacePic `json:"FacePic,omitempty"`    // Face crops array — No
 	Plate      ANPRPlate     `json:"Plate"`                // Plate info block — Yes
 	Vehicle    *ANPRVehicle  `json:"Vehicle,omitempty"`    // Vehicle info — No
+	SnapInfo   ANPRSnapInfo  `json:"SnapInfo"`             // Snap info block — Yes
 }
 
 // PicItem is a single picture: filename + base64 content.
@@ -95,7 +94,7 @@ type ANPRVehicle struct {
 // ANPRSnapInfo holds capture metadata per §5.3 SnapInfo block.
 // DeviceID and InCarPeopleNum are also at this level per spec.
 type ANPRSnapInfo struct {
-	TriggerSource    string `json:"TriggerSource,omitempty"`    // No — Unknown/Coil/Radar/Video
+	TriggerSource    string `json:"Source,omitempty"`           // No — Unknown/Coil/Radar/Video
 	SnapTime         string `json:"SnapTime,omitempty"`         // No — yyyy-mm-dd hh:mm:ss
 	AccurateTime     string `json:"AccurateTime,omitempty"`     // No — yyyy-mm-dd hh:mm:ss.sss
 	TimeZone         int    `json:"TimeZone"`                   // No — Appendix 1.8
@@ -126,22 +125,19 @@ type ANPRReply struct {
 // ── 5.4 Parking / ParkingInfo ────────────────────────────────────────────────
 
 // ParkingPayload is the full body for POST /NotificationInfo/ParkingInfo.
-// inRecordId is at root level (not inside ParkingInfo) per spec p.17.
 type ParkingPayload struct {
-	Picture     ParkingPicture `json:"Picture"`
-	ParkingInfo ParkingInfo    `json:"ParkingInfo"`
-	DeviceID    string         `json:"DeviceID,omitempty"`   // C — carry when DeviceInfo supported
-	InRecordID  string         `json:"inRecordId,omitempty"` // YES — only on exit to match entry
+	Picture ParkingPicture `json:"Picture"`
 }
 
 // ParkingPicture holds all image sub-types for a parking capture.
 // NormalPic supports dual-picture (primary + secondary) per spec.
 type ParkingPicture struct {
-	NormalPic  *ParkingNormalPic `json:"NormalPic,omitempty"`  // No — scene with optional 2nd frame
-	CombinPic  []PicItem         `json:"CombinPic,omitempty"`  // No — combined drawings array
-	VehiclePic *PicItem          `json:"VehiclePic,omitempty"` // No — vehicle crop
-	Plate      ParkingPlate      `json:"Plate"`                // Yes — plate info block
-	Vehicle    *ParkingVehicle   `json:"Vehicle,omitempty"`    // No — vehicle info
+	NormalPic   *ParkingNormalPic `json:"NormalPic,omitempty"`  // No — scene with optional 2nd frame
+	CombinPic   []PicItem         `json:"CombinPic,omitempty"`  // No — combined drawings array
+	VehiclePic  *PicItem          `json:"VehiclePic,omitempty"` // No — vehicle crop
+	Plate       ParkingPlate      `json:"Plate"`                // Yes — plate info block
+	Vehicle     *ParkingVehicle   `json:"Vehicle,omitempty"`    // No — vehicle info
+	ParkingInfo ParkingInfo       `json:"ParkingInfo"`          // Parking info block — Yes
 }
 
 // ParkingNormalPic is the original scene image, optionally with a second frame.
@@ -185,16 +181,19 @@ type ParkingRelationship struct {
 
 // ParkingInfo holds capture metadata per §5.4 ParkingInfo block.
 type ParkingInfo struct {
-	SnapTime        string                `json:"SnapTime"`               // Yes — yyyy-mm-dd hh:mm:ss
-	TimeZone        int                   `json:"TimeZone"`               // No — Appendix 1.8
-	DSTTune         int                   `json:"DSTTune"`                // No — 0=normal 1=DST
-	Channel         int                   `json:"Channel"`                // No — 0-based
-	ParkingStallsNo string                `json:"ParkingStallsNo"`        // Yes — char(64)
-	Direction       string                `json:"Direction,omitempty"`    // No — Obverse/Reverse/Unknow
-	ParkingStatus   int                   `json:"ParkingStatus"`          // YES — 0-4
-	AllowUser       bool                  `json:"AllowUser"`              // No
-	BlockUser       bool                  `json:"BlockUser"`              // No
-	Relationship    []ParkingRelationship `json:"Relationship,omitempty"` // C — exit only
+	SnapTime         string                `json:"SnapTime"`                   // Yes — yyyy-mm-dd hh:mm:ss
+	TimeZone         int                   `json:"TimeZone"`                   // No — Appendix 1.8
+	DSTTune          int                   `json:"DSTTune"`                    // No — 0=normal 1=DST
+	Channel          int                   `json:"Channel"`                    // No — 0-based
+	DetectRegionName string                `json:"DetectRegionName,omitempty"` // No — char(64)
+	ParkingStallsNo  string                `json:"ParkingStallsNo"`            // Yes — char(64)
+	Direction        string                `json:"Direction,omitempty"`        // No — Obverse/Reverse/Unknow
+	ParkingStatus    int                   `json:"ParkingStatus"`              // YES — 0-4
+	AllowUser        bool                  `json:"AllowUser"`                  // No
+	BlockUser        bool                  `json:"BlockUser"`                  // No
+	Relationship     []ParkingRelationship `json:"Relationship,omitempty"`     // C — exit only
+	DeviceID         string                `json:"DeviceID,omitempty"`         // C — carry when DeviceInfo supported
+	InRecordID       string                `json:"inRecordId,omitempty"`       // YES — only on exit to match entry
 }
 
 // ParkingReply is the response body for a ParkingInfo push per §5.4 reply definition.

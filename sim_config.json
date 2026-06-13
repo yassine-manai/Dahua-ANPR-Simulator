@@ -3,8 +3,8 @@
     {
       "id": "cam_1778087142327",
       "label": "DAHUA ITS - 44",
-      "backend_url": "http://127.0.0.1:9898",
-      "device_id": "0e2d1915-eb07-4ee7-a660-52b50aea8086",
+      "backend_url": "http://127.0.0.1:8096",
+      "device_id": "4711471147",
       "device_name": "DH-ITC205",
       "device_model": "DH-ITC205",
       "device_type": "Tollgate",
@@ -15,30 +15,18 @@
       "auth_enabled": false,
       "username": "",
       "password": "",
-      "heartbeat_interval": 300,
+      "heartbeat_interval": 5,
       "plate_pool": [
         "ABG145",
         "AFD3663"
       ],
-      "channels": [
-        {
-          "channel_no": 0,
-          "label": "Channel 0",
-          "spots": [
-            {
-              "id": "CH0-S1",
-              "plate": "AFD3663",
-              "image_id": "img_1778090519701249800"
-            }
-          ]
-        }
-      ]
+      "channels": null
     },
     {
       "id": "cam_1778358611452",
       "label": "ANPR Tesla CAM",
-      "backend_url": "http://localhost:8096",
-      "device_id": "cc76572a-f00c-4958-86fd-5a678b4defa5",
+      "backend_url": "http://127.0.0.1:8096",
+      "device_id": "4711",
       "device_name": "DH-ITC205",
       "device_model": "DH-ITC205",
       "device_type": "Tollgate",
@@ -58,13 +46,8 @@
           "spots": [
             {
               "id": "1",
-              "plate": "25aa36",
+              "plate": "AGF88AA",
               "image_id": "img_1778090519701249800"
-            },
-            {
-              "id": "2",
-              "plate": "AZE5f",
-              "image_id": "img_1778358661796885800"
             }
           ]
         }

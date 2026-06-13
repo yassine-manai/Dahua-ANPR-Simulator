@@ -502,6 +502,57 @@
     <div id="logEntries" class="log-entries"></div>
   </div>
 
+  <!-- ── ManSnap LPN Confirmation Modal ──────────────────────────────────── -->
+  <div id="confirmModal" class="modal-overlay" style="display:none">
+    <div class="modal-backdrop"></div>
+    <div class="modal-container">
+      <div class="modal-header">
+        <span class="modal-icon">📷</span>
+        <span>MANUAL SNAPSHOT — LPN CONFIRMATION</span>
+      </div>
+      <div class="modal-body">
+        <div class="modal-info-row">
+          <span class="modal-info-label">Camera:</span>
+          <span id="confirmCameraLabel" class="modal-info-value">—</span>
+        </div>
+        <div class="modal-info-row">
+          <span class="modal-info-label">IP:</span>
+          <span id="confirmCameraIP" class="modal-info-value">—</span>
+        </div>
+        <div class="modal-info-row">
+          <span class="modal-info-label">Channel:</span>
+          <span id="confirmChannel" class="modal-info-value">—</span>
+        </div>
+        <div class="modal-info-row">
+          <span class="modal-info-label">Device ID:</span>
+          <span id="confirmDeviceID" class="modal-info-value modal-mono">—</span>
+        </div>
+        <div class="modal-info-row">
+          <span class="modal-info-label">Response:</span>
+          <span id="confirmResponseType" class="modal-info-value">—</span>
+        </div>
+        <div class="modal-info-row">
+          <span class="modal-info-label">Last Plate:</span>
+          <span id="confirmLastPlate" class="modal-info-value modal-mono" style="font-size:16px;letter-spacing:2px;font-weight:700;color:var(--accent)">—</span>
+        </div>
+
+        <div class="modal-section-title">EVENT PAYLOAD</div>
+        <pre id="confirmPayloadPreview" class="modal-payload-preview">—</pre>
+
+        <div class="modal-section-title">LICENSE PLATE</div>
+        <div class="modal-plate-row">
+          <input type="text" id="confirmPlateInput" class="modal-plate-input" placeholder="Type license plate number..." autocomplete="off" />
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-modal-confirm" id="btnConfirmReuse" style="flex:1">📋 Send with Last Event</button>
+          <button class="btn-modal-fake" id="btnConfirmFake" style="flex:1">🆕 Send as New Capture</button>
+          <button class="btn-modal-cancel" id="btnCancelConfirm">✕</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

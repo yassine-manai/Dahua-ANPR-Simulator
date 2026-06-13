@@ -1087,3 +1087,180 @@ button {
   white-space: nowrap;
   flex: 1;
 }
+
+/* ── ManSnap Confirmation Modal ─────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-backdrop {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.55);
+}
+.modal-container {
+  position: relative;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+  width: 480px;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  z-index: 1;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  color: var(--text);
+}
+.modal-icon { font-size: 18px; }
+.modal-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.modal-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.modal-info-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text3);
+  text-transform: uppercase;
+  min-width: 72px;
+}
+.modal-info-value {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+}
+.modal-mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text2);
+  font-weight: 400;
+}
+.modal-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--text3);
+  text-transform: uppercase;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+.modal-payload-preview {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text2);
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.modal-plate-row {
+  display: flex;
+  gap: 8px;
+}
+.modal-plate-input {
+  flex: 1;
+  background: var(--bg2);
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  padding: 10px 12px;
+  outline: none;
+  text-align: center;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.modal-plate-input:focus {
+  border-color: var(--accent2);
+  box-shadow: 0 0 0 3px rgba(0,112,204,0.15);
+}
+[data-theme="dark"] .modal-plate-input:focus {
+  box-shadow: 0 0 0 3px rgba(0,229,255,0.15);
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.btn-modal-confirm {
+  flex: 1;
+  background: var(--green);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.1s;
+}
+.btn-modal-confirm:hover { background: #158c4e; }
+.btn-modal-confirm:active { transform: scale(0.97); }
+.btn-modal-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 10px 16px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.btn-modal-cancel:hover {
+	border-color: var(--red);
+	color: var(--red);
+}
+.btn-modal-fake {
+	flex: 1;
+	background: var(--orange);
+	color: #fff;
+	font-family: var(--font-ui);
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 1px;
+	padding: 10px 12px;
+	border: none;
+	border-radius: 3px;
+	cursor: pointer;
+	transition: background 0.12s, transform 0.1s;
+}
+.btn-modal-fake:hover { background: #b05000; }
+.btn-modal-fake:active { transform: scale(0.97); }
+[data-theme="dark"] .btn-modal-fake { color: #000; }
+[data-theme="dark"] .btn-modal-confirm { color: #000; }

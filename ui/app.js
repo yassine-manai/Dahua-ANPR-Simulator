@@ -286,7 +286,7 @@ function buildANPROverrides() {
   if (speed)  vehicleObj.Speed = speed;
 
   const snapInfo = {
-    TriggerSource: trigger,
+    Source: trigger,
     SnapTime:      nowStr(),
     AccurateTime:  nowMsStr(),
     TimeZone:      2,
@@ -304,10 +304,10 @@ function buildANPROverrides() {
 
   return {
     Picture: {
-      Plate:   plateObj,
-      Vehicle: vehicleObj,
+      Plate:    plateObj,
+      Vehicle:  vehicleObj,
+      SnapInfo: snapInfo,
     },
-    SnapInfo: snapInfo,
   };
 }
 
@@ -378,19 +378,17 @@ function buildParkingOverrides() {
     ParkingStatus:   status,
     AllowUser:       false,
     BlockUser:       false,
+    DeviceID:        cam?.device_id || '',
   };
+  if (inRecord) info.inRecordId = inRecord;
 
   const payload = {
     Picture: {
-      Plate:   plateObj,
-      Vehicle: vehicleObj,
+      Plate:       plateObj,
+      Vehicle:     vehicleObj,
+      ParkingInfo: info,
     },
-    ParkingInfo: info,
-    DeviceID: cam?.device_id || '',
   };
-
-  // inRecordId is at root level per spec
-  if (inRecord) payload.inRecordId = inRecord;
 
   return payload;
 }
@@ -834,32 +832,32 @@ async function msSendEvent(cam, ch, spotId, plate, imageId, cardEl, statusEl) {
         IsExist:     !!plate,
         PlateNumber: plate || '',
         PlateColor:  'White',
-        PlateType:   'Normal',
+        PlateType:   '',
         Confidence:  85,
         BoundingBox: [100, 200, 300, 260],
       },
-      Vehicle: {},
+      ParkingInfo: {
+        SnapTime:        now,
+        TimeZone:        2,
+        DSTTune:         0,
+        Channel:         ch.channel_no,
+        ParkingStallsNo: spotId,
+        Direction:       'Obverse',
+        ParkingStatus:   4,
+        AllowUser:       false,
+        BlockUser:       false,
+        DeviceID:        cam.device_id,
+      },
     },
-    ParkingInfo: {
-      SnapTime:        now,
-      TimeZone:        2,
-      DSTTune:         0,
-      Channel:         ch.channel_no,
-      ParkingStallsNo: spotId,
-      Direction:       'Obverse',
-      ParkingStatus:   4,
-      AllowUser:       false,
-      BlockUser:       false,
-    },
-    DeviceID: cam.device_id,
   };
 
-  // Attach this spot's own image if selected
+  // Attach this spot's own image if selected (used for both scene and plate cutout)
   if (imageId) {
     const meta = imgLib.list.find(i => i.id === imageId);
     const data = await imgResolve(imageId);
     if (data && meta) {
       overrides.Picture.NormalPic = { PicName: meta.name, Content: data };
+      overrides.Picture.CutoutPic = { PicName: meta.name.replace(/(\.[^.]+)$/, '-plate$1'), Content: data };
     }
   }
 
@@ -1401,3 +1399,111 @@ document.getElementById('btnSendParking').addEventListener('click', async () => 
 // We inject it into index.html programmatically here.
 // ── Init image library ────────────────────────────────────────────────────────
 imgLoad();
+
+// ── ManSnap LPN Confirmation ────────────────────────────────────────────────
+let confirmPollInterval = null;
+let currentPendingConfirm = null;
+
+function startConfirmPoll() {
+  stopConfirmPoll();
+  pollPendingConfirmations();
+  confirmPollInterval = setInterval(pollPendingConfirmations, 2000);
+}
+
+function stopConfirmPoll() {
+  if (confirmPollInterval) {
+    clearInterval(confirmPollInterval);
+    confirmPollInterval = null;
+  }
+}
+
+async function pollPendingConfirmations() {
+  // don't re-poll if modal is already showing
+  if (document.getElementById('confirmModal').style.display !== 'none') return;
+
+  const pendings = await GET('/sim/pending-confirmations');
+  if (!Array.isArray(pendings) || pendings.length === 0) return;
+
+  const p = pendings[0];
+  currentPendingConfirm = p;
+  showConfirmModal(p);
+}
+
+function showConfirmModal(p) {
+  document.getElementById('confirmCameraLabel').textContent = p.camera_label || p.camera_id;
+  document.getElementById('confirmCameraIP').textContent   = p.camera_ip || '—';
+  document.getElementById('confirmChannel').textContent    = p.channel !== undefined ? p.channel : '—';
+  document.getElementById('confirmDeviceID').textContent   = p.device_id || '—';
+  const isManual = p.response_type === 'manual_lpn';
+  document.getElementById('confirmResponseType').textContent = isManual ? '🔤 Manual LPN (first capture)' : '📋 With Last Payload';
+  document.getElementById('confirmResponseType').style.color = isManual ? 'var(--orange)' : 'var(--green)';
+  document.getElementById('confirmLastPlate').textContent = p.last_plate || '—';
+  document.getElementById('confirmPayloadPreview').textContent = p.last_payload
+    ? JSON.stringify(p.last_payload, null, 2)
+    : '—';
+  const reuseBtn = document.getElementById('btnConfirmReuse');
+  if (isManual || !p.last_plate) {
+    reuseBtn.style.display = 'none';
+  } else {
+    reuseBtn.style.display = '';
+  }
+  document.getElementById('confirmPlateInput').value = p.last_plate || '';
+  document.getElementById('confirmPlateInput').focus();
+  document.getElementById('confirmModal').style.display = 'flex';
+}
+
+function closeConfirmModal() {
+  document.getElementById('confirmModal').style.display = 'none';
+  currentPendingConfirm = null;
+}
+
+async function doConfirm(mode) {
+  if (!currentPendingConfirm) return;
+  const plate = document.getElementById('confirmPlateInput').value.trim();
+  if (!plate) {
+    document.getElementById('confirmPlateInput').focus();
+    document.getElementById('confirmPlateInput').style.borderColor = 'var(--red)';
+    setTimeout(() => {
+      document.getElementById('confirmPlateInput').style.borderColor = '';
+    }, 1000);
+    return;
+  }
+  const res = await POST('/sim/confirm-lpn', {
+    camera_id:    currentPendingConfirm.camera_id,
+    plate_number: plate,
+    mode:         mode,
+  });
+  if (res.confirmed) {
+    setStatus(200);
+  } else {
+    setStatus(0);
+  }
+  closeConfirmModal();
+}
+
+document.getElementById('btnConfirmReuse').addEventListener('click', () => doConfirm('reuse_last'));
+document.getElementById('btnConfirmFake').addEventListener('click', () => doConfirm('fake'));
+
+document.getElementById('btnCancelConfirm').addEventListener('click', () => {
+  closeConfirmModal();
+});
+
+// Close modal on backdrop click
+document.querySelector('.modal-backdrop')?.addEventListener('click', () => {
+  closeConfirmModal();
+});
+
+// Enter key in plate input triggers reuse (default action)
+document.getElementById('confirmPlateInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const reuseBtn = document.getElementById('btnConfirmReuse');
+    if (reuseBtn.style.display !== 'none') {
+      reuseBtn.click();
+    } else {
+      document.getElementById('btnConfirmFake').click();
+    }
+  }
+});
+
+// Start polling on page load
+startConfirmPoll();

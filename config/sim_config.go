@@ -46,7 +46,7 @@ type CameraConfig struct {
 	DeviceID          string          `json:"device_id"`
 	DeviceName        string          `json:"device_name"`
 	DeviceModel       string          `json:"device_model"`
-	DeviceType        string          `json:"device_type"`   // "Tollgate" | "E-Police"
+	DeviceType        string          `json:"device_type"` // "Tollgate" | "E-Police"
 	Manufacturer      string          `json:"manufacturer"`
 	IPAddress         string          `json:"ip_address"`
 	IPv6Address       string          `json:"ipv6_address"`
@@ -130,6 +130,17 @@ func (s *SimConfig) Get(id string) (CameraConfig, bool) {
 		}
 	}
 	return CameraConfig{}, false
+}
+
+func (s *SimConfig) ExistsByDeviceID(deviceID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, c := range s.Cameras {
+		if c.DeviceID == deviceID {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *SimConfig) Upsert(cam CameraConfig) {
