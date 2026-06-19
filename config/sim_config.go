@@ -133,9 +133,16 @@ func (s *SimConfig) Get(id string) (CameraConfig, bool) {
 }
 
 func (s *SimConfig) ExistsByDeviceID(deviceID string) bool {
+	return s.ExistsByDeviceIDExcluding(deviceID, "")
+}
+
+func (s *SimConfig) ExistsByDeviceIDExcluding(deviceID string, excludeID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, c := range s.Cameras {
+		if c.ID == excludeID {
+			continue
+		}
 		if c.DeviceID == deviceID {
 			return true
 		}

@@ -46,6 +46,9 @@ func main() {
 	sim.POST("/cameras/:id/send/parking", h.SendParking)
 	sim.POST("/cameras/:id/send/alarm", h.SendAlarm)
 
+	// ── SSE events for real-time UI ─────────────────────────────────────────────
+	sim.GET("/events", h.SSEEvents)
+
 	// ── LPN Confirmation (ManSnap) ──────────────────────────────────────────────
 	sim.GET("/cgi-bin/trafficSnap.cgi", h.ManualSnap)
 	r.GET("/cgi-bin/trafficSnap.cgi", h.ManualSnap)
@@ -57,6 +60,7 @@ func main() {
 	sim.GET("/images", h.ListImages)
 	sim.POST("/images", h.AddImages)
 	sim.GET("/images/:id", h.GetImage)
+	sim.GET("/images/:id/raw", h.GetImageRaw)
 	sim.DELETE("/images/:id", h.DeleteImage)
 
 	addr := ":9797"

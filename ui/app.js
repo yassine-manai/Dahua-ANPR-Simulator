@@ -35,6 +35,10 @@ function genUUID() {
 async function loadCameras() {
   const cameras = await GET('/sim/cameras');
   state.cameras = cameras || [];
+  state.hbRunning = {};
+  for (const cam of state.cameras) {
+    if (cam.heartbeat_active) state.hbRunning[cam.id] = true;
+  }
   renderCameraList();
   if (state.activeCameraId) {
     const still = state.cameras.find(c => c.id === state.activeCameraId);
@@ -145,7 +149,12 @@ function setSendEnabled(on) {
 document.getElementById('btnSaveConfig').addEventListener('click', async () => {
   if (!state.activeCameraId) return;
   const cam = readConfig();
-  await PUT(`/sim/cameras/${state.activeCameraId}`, cam);
+  const res = await PUT(`/sim/cameras/${state.activeCameraId}`, cam);
+  if (res.error) {
+    setStatus(0);
+    flash('btnSaveConfig', '✗ ' + res.error);
+    return;
+  }
   await loadCameras();
   refreshAllPreviews(cam);
   flash('btnSaveConfig', '✓ SAVED');
@@ -208,6 +217,85 @@ function updateHBStatus(id) {
   const running = state.hbRunning[id];
   el.textContent = running ? '● RUNNING' : '● STOPPED';
   el.className = 'hb-status' + (running ? ' running' : '');
+}
+
+// ── State sync across instances ──────────────────────────────────────────────
+function startStateSync() {
+  setInterval(async () => {
+    const cameras = await GET('/sim/cameras');
+    if (!cameras) return;
+    state.cameras = cameras;
+    for (const cam of cameras) {
+      state.hbRunning[cam.id] = !!cam.heartbeat_active;
+    }
+    renderCameraList();
+    if (state.activeCameraId) {
+      const still = cameras.find(c => c.id === state.activeCameraId);
+      if (!still) {
+        state.activeCameraId = null;
+        setConfigEnabled(false);
+        setSendEnabled(false);
+        stopLogPoll();
+        document.getElementById('logEntries').innerHTML = '';
+      } else {
+        updateHBStatus(state.activeCameraId);
+      }
+    }
+  }, 30000);
+}
+
+// ── SSE real-time events ────────────────────────────────────────────────────
+function startSSE() {
+  const es = new EventSource('/sim/events');
+
+  es.addEventListener('log', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.camera_id === state.activeCameraId) {
+        appendLogEntry(data.entry);
+      }
+    } catch (_) {}
+  });
+
+  es.addEventListener('state_change', () => {
+    loadCameras();
+  });
+
+  es.addEventListener('pending_confirm', () => {
+    pollPendingConfirmations();
+  });
+}
+
+function appendLogEntry(entry) {
+  const container = document.getElementById('logEntries');
+  if (!container) return;
+
+  const empty = container.querySelector('.empty-state');
+  if (empty) container.innerHTML = '';
+
+  const statusClass = !entry.status_code ? 'err' : entry.status_code < 300 ? 'ok' : entry.status_code < 500 ? 'warn' : 'err';
+  const statusText  = entry.status_code || (entry.error ? 'ERR' : '—');
+  const bodyPreview = entry.error ? entry.error : (entry.res_body || '').substring(0, 120);
+
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.onclick = () => toggleLogEntry(div);
+  div.innerHTML = `
+    <span class="log-time">${escHtml(entry.time)}</span>
+    <span class="log-method">POST</span>
+    <span class="log-endpoint">${escHtml(entry.endpoint)}</span>
+    <span class="log-status ${statusClass}">${statusText}</span>
+    <span class="log-body">${escHtml(bodyPreview)}</span>
+    <div class="log-entry-details">
+      <div class="log-req-label">REQUEST</div>
+      <pre style="color:var(--text2);font-size:10px;white-space:pre-wrap;word-break:break-all;margin-bottom:6px">${escHtml(prettyJSON(entry.req_body))}</pre>
+      <div class="log-res-label">RESPONSE</div>
+      <pre style="color:var(--text2);font-size:10px;white-space:pre-wrap;word-break:break-all">${escHtml(entry.error ? '⚠ ' + entry.error : prettyJSON(entry.res_body))}</pre>
+    </div>
+  `;
+
+  container.prepend(div);
+  lastLogCount++;
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -475,7 +563,7 @@ function refreshAllPreviews(cam) {
 function startLogPoll(id) {
   stopLogPoll();
   pollLog(id);
-  state.logPollInterval = setInterval(() => pollLog(id), 2000);
+  state.logPollInterval = setInterval(() => pollLog(id), 30000);
 }
 
 function stopLogPoll() {
@@ -581,6 +669,8 @@ function flash(btnId, msg) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadCameras();
+startStateSync();
+startSSE();
 
 // ── Theme toggle ──────────────────────────────────────────────────────────────
 (function () {
@@ -804,18 +894,7 @@ function msShowPreview(previewEl, previewImg, imgId) {
     return;
   }
   previewEl.style.display = 'block';
-  // Use cached data if available
-  if (imgLib.data[imgId]) {
-    previewImg.src = 'data:image/*;base64,' + imgLib.data[imgId];
-    return;
-  }
-  // Fetch and cache
-  GET('/sim/images/' + imgId).then(full => {
-    if (full && full.data) {
-      imgLib.data[imgId] = full.data;
-      previewImg.src = 'data:image/*;base64,' + full.data;
-    }
-  });
+  previewImg.src = '/sim/images/' + imgId + '/raw';
 }
 
 // ── Send parking detection event ──────────────────────────────────────────────
@@ -1016,24 +1095,9 @@ function imgRenderThumbs() {
     const card = document.createElement('div');
     card.className = 'img-thumb-card';
 
-    // Use cached data-URI if we have it, otherwise fetch
-    const src = imgLib.data[img.id]
-      ? 'data:image/*;base64,' + imgLib.data[img.id]
-      : '';
-
     const thumb = document.createElement('img');
     thumb.alt = img.name;
-    if (src) {
-      thumb.src = src;
-    } else {
-      // Lazy-load thumbnail
-      GET('/sim/images/' + img.id).then(full => {
-        if (full && full.data) {
-          imgLib.data[img.id] = full.data;
-          thumb.src = 'data:image/*;base64,' + full.data;
-        }
-      });
-    }
+    thumb.src = '/sim/images/' + img.id + '/raw';
 
     const nameEl = document.createElement('div');
     nameEl.className = 'img-thumb-name';
@@ -1260,16 +1324,7 @@ function tabPickerUpdatePreview(selectId, imgId) {
     return;
   }
   previewEl.classList.add('visible');
-  if (imgLib.data[imgId]) {
-    imgEl.src = 'data:image/*;base64,' + imgLib.data[imgId];
-    return;
-  }
-  GET('/sim/images/' + imgId).then(full => {
-    if (full && full.data) {
-      imgLib.data[imgId] = full.data;
-      imgEl.src = 'data:image/*;base64,' + full.data;
-    }
-  });
+  imgEl.src = '/sim/images/' + imgId + '/raw';
 }
 
 // ── Init tab pickers (ANPR + Parking tabs) ────────────────────────────────────
@@ -1407,7 +1462,7 @@ let currentPendingConfirm = null;
 function startConfirmPoll() {
   stopConfirmPoll();
   pollPendingConfirmations();
-  confirmPollInterval = setInterval(pollPendingConfirmations, 2000);
+  confirmPollInterval = setInterval(pollPendingConfirmations, 30000);
 }
 
 function stopConfirmPoll() {

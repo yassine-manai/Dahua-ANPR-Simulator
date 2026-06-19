@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,6 +42,7 @@ type Handler struct {
 	runtime            map[string]*runtimeCamera
 	pendingManualSnaps map[string]int // camera ID → channel
 	pendingMu          sync.Mutex
+	hub                *SSEHub
 }
 
 func New(cfg *config.SimConfig) *Handler {
@@ -47,6 +50,7 @@ func New(cfg *config.SimConfig) *Handler {
 		cfg:                cfg,
 		runtime:            make(map[string]*runtimeCamera),
 		pendingManualSnaps: make(map[string]int),
+		hub:                NewSSEHub(),
 	}
 	for _, cam := range cfg.All() {
 		h.runtime[cam.ID] = &runtimeCamera{}
@@ -54,7 +58,55 @@ func New(cfg *config.SimConfig) *Handler {
 	return h
 }
 
+// ── SSE Hub for real-time UI updates ─────────────────────────────────────────
+
+// SSEHub manages Server-Sent Event clients for real-time UI updates.
+type SSEHub struct {
+	mu      sync.Mutex
+	clients map[chan []byte]struct{}
+}
+
+func NewSSEHub() *SSEHub {
+	return &SSEHub{
+		clients: make(map[chan []byte]struct{}),
+	}
+}
+
+func (h *SSEHub) Subscribe() chan []byte {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	ch := make(chan []byte, 64)
+	h.clients[ch] = struct{}{}
+	return ch
+}
+
+func (h *SSEHub) Unsubscribe(ch chan []byte) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.clients, ch)
+	close(ch)
+}
+
+func (h *SSEHub) Broadcast(event string, data interface{}) {
+	payload, _ := json.Marshal(data)
+	msg := []byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, payload))
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for ch := range h.clients {
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+}
+
 // SetID is kept for backward compatibility but unused with gin (params come from context).
+// CameraListItem combines config with runtime status for the API response.
+type CameraListItem struct {
+	config.CameraConfig
+	HeartbeatActive bool `json:"heartbeat_active"`
+}
+
 func (h *Handler) SetID(_ string) {}
 
 func (h *Handler) rt(id string) *runtimeCamera {
@@ -74,12 +126,23 @@ func (h *Handler) appendLog(id string, e LogEntry) {
 	if len(rt.log) > maxLogEntries {
 		rt.log = rt.log[len(rt.log)-maxLogEntries:]
 	}
+	h.hub.Broadcast("log", gin.H{"camera_id": id, "entry": e})
 }
 
 // ── Camera CRUD ───────────────────────────────────────────────────────────────
 
 func (h *Handler) ListCameras(c *gin.Context) {
-	c.JSON(http.StatusOK, h.cfg.All())
+	cameras := h.cfg.All()
+	items := make([]CameraListItem, len(cameras))
+	h.mu.Lock()
+	for i, cam := range cameras {
+		items[i].CameraConfig = cam
+		if rt, ok := h.runtime[cam.ID]; ok && rt.stopHeartbeat != nil {
+			items[i].HeartbeatActive = true
+		}
+	}
+	h.mu.Unlock()
+	c.JSON(http.StatusOK, items)
 }
 
 func (h *Handler) AddCamera(c *gin.Context) {
@@ -100,12 +163,13 @@ func (h *Handler) AddCamera(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	h.hub.Broadcast("state_change", gin.H{})
 	c.JSON(http.StatusOK, cam)
 }
 
 func (h *Handler) UpdateCamera(c *gin.Context) {
 	id := c.Param("id")
-	existing, ok := h.cfg.Get(id)
+	_, ok := h.cfg.Get(id)
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "camera not found"})
 		return
@@ -116,7 +180,7 @@ func (h *Handler) UpdateCamera(c *gin.Context) {
 		return
 	}
 	cam.ID = id
-	if cam.DeviceID != "" && cam.DeviceID != existing.DeviceID && h.cfg.ExistsByDeviceID(cam.DeviceID) {
+	if cam.DeviceID != "" && h.cfg.ExistsByDeviceIDExcluding(cam.DeviceID, id) {
 		c.JSON(http.StatusConflict, gin.H{"error": "device_id already exists"})
 		return
 	}
@@ -125,6 +189,7 @@ func (h *Handler) UpdateCamera(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	h.hub.Broadcast("state_change", gin.H{})
 	c.JSON(http.StatusOK, cam)
 }
 
@@ -136,6 +201,7 @@ func (h *Handler) DeleteCamera(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	h.hub.Broadcast("state_change", gin.H{})
 	c.JSON(http.StatusOK, gin.H{"deleted": id})
 }
 
@@ -197,11 +263,13 @@ func (h *Handler) StartHeartbeat(c *gin.Context) {
 			}
 		}
 	}()
+	h.hub.Broadcast("state_change", gin.H{})
 	c.JSON(http.StatusOK, gin.H{"started": true, "interval": interval})
 }
 
 func (h *Handler) StopHeartbeat(c *gin.Context) {
 	h.stopHB(c.Param("id"))
+	h.hub.Broadcast("state_change", gin.H{})
 	c.JSON(http.StatusOK, gin.H{"stopped": true})
 }
 
@@ -212,6 +280,31 @@ func (h *Handler) stopHB(id string) {
 		close(rt.stopHeartbeat)
 		rt.stopHeartbeat = nil
 	}
+}
+
+// ── SSE events for real-time UI updates ─────────────────────────────────────
+
+func (h *Handler) SSEEvents(c *gin.Context) {
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+
+	ch := h.hub.Subscribe()
+	defer h.hub.Unsubscribe(ch)
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case msg, ok := <-ch:
+			if !ok {
+				return false
+			}
+			w.Write(msg)
+			c.Writer.Flush()
+			return true
+		case <-c.Request.Context().Done():
+			return false
+		}
+	})
 }
 
 // ── Send handlers ─────────────────────────────────────────────────────────────
@@ -253,8 +346,9 @@ func (h *Handler) SendANPR(c *gin.Context) {
 	now := time.Now()
 	payload := models.ANPRPayload{
 		Picture: models.ANPRPicture{
-			// NormalPic / CombinPic / CutoutPic / VehiclePic / FacePic
-			// injected via UI overrides when images are selected
+			NormalPic:  &models.PicItem{},
+			CutoutPic:  &models.PicItem{},
+			VehiclePic: &models.PicItem{},
 			Plate: models.ANPRPlate{
 				IsExist:     false,
 				PlateNumber: "",
@@ -357,6 +451,29 @@ func (h *Handler) GetImage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, img)
+}
+
+func (h *Handler) GetImageRaw(c *gin.Context) {
+	img, ok := h.cfg.GetImage(c.Param("id"))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
+		return
+	}
+	data, err := base64.StdEncoding.DecodeString(img.Data)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid image data"})
+		return
+	}
+	name := strings.ToLower(img.Name)
+	contentType := "image/jpeg"
+	if strings.HasSuffix(name, ".png") {
+		contentType = "image/png"
+	} else if strings.HasSuffix(name, ".gif") {
+		contentType = "image/gif"
+	} else if strings.HasSuffix(name, ".webp") {
+		contentType = "image/webp"
+	}
+	c.Data(http.StatusOK, contentType, data)
 }
 
 func (h *Handler) AddImages(c *gin.Context) {
@@ -505,6 +622,7 @@ func (h *Handler) ManualSnap(c *gin.Context) {
 	h.pendingManualSnaps[cam.ID] = channel
 	h.pendingMu.Unlock()
 
+	h.hub.Broadcast("pending_confirm", gin.H{})
 	c.JSON(http.StatusOK, gin.H{})
 }
 
@@ -620,6 +738,9 @@ func (h *Handler) ConfirmLPN(c *gin.Context) {
 	// build fresh default payload regardless of mode
 	payload := map[string]interface{}{
 		"Picture": map[string]interface{}{
+			"NormalPic":  map[string]interface{}{"PicName": "", "Content": ""},
+			"CutoutPic":  map[string]interface{}{"PicName": "", "Content": ""},
+			"VehiclePic": map[string]interface{}{"PicName": "", "Content": ""},
 			"Plate": map[string]interface{}{
 				"IsExist":     true,
 				"PlateNumber": req.PlateNumber,
@@ -789,7 +910,7 @@ func (h *Handler) post(cam config.CameraConfig, path string, payload interface{}
 	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
 	req.Header.Set("Connection", "close")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, "", fmt.Errorf("handlers.post: %w", err)
